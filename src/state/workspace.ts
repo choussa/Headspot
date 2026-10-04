@@ -1,6 +1,8 @@
 export interface ProjectMeta {
   id: string
   name: string
+  folderId?: string | null
+  thumbnail?: string | null
   createdAt: number
   updatedAt: number
 }

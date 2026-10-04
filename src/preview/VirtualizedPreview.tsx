@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { PreviewNavigator, type TypstProject } from '@vedivad/typst-web-service'
 import type { PageInfo } from '@vedivad/typst-web-service'
 import { PagePlaceholder } from './PagePlaceholder'
 
@@ -8,9 +9,12 @@ interface Props {
   renderPage: (index: number) => Promise<string | undefined>
   zoom?: number
   onZoomChange?: (zoom: number) => void
+  engine?: TypstProject | null
+  navRef?: MutableRefObject<PreviewNavigator | null>
+  onSourceJump?: (file: string, line: number, column: number) => void
 }
 
-export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, onZoomChange }: Props) {
+export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, onZoomChange, engine, navRef, onSourceJump }: Props) {
   const [visible, setVisible] = useState<Set<number>>(new Set())
   const [observer, setObserver] = useState<IntersectionObserver | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -35,40 +39,70 @@ export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, 
     return () => obs.disconnect()
   }, [])
 
+  const onSourceJumpRef = useRef(onSourceJump)
+  useEffect(() => {
+    onSourceJumpRef.current = onSourceJump
+  })
+
+  useEffect(() => {
+    const scroller = containerRef.current
+    if (!scroller || !engine || !navRef) return
+    const nav = PreviewNavigator.create({
+      project: () => engine,
+      scroller,
+      pages: () => Array.from(scroller.querySelectorAll('[data-page]')),
+      onSource: (file, line, column) => onSourceJumpRef.current?.(file, line, column),
+    })
+    navRef.current = nav
+    return () => {
+      nav.dispose()
+      navRef.current = null
+    }
+  }, [engine, navRef])
+
+  const clampZoom = (value: number) => Math.min(500, Math.max(25, value))
   const zoomRef = useRef(zoom)
-  zoomRef.current = zoom
   const onZoomChangeRef = useRef(onZoomChange)
-  onZoomChangeRef.current = onZoomChange
+  useEffect(() => {
+    zoomRef.current = zoom
+    onZoomChangeRef.current = onZoomChange
+  })
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    
+    const onNativeWheel = (event: WheelEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || !onZoomChangeRef.current) return
+      event.preventDefault()
+      onZoomChangeRef.current(clampZoom(zoomRef.current + (event.deltaY > 0 ? -5 : 5)))
+    }
     const onNativeTouchMove = (event: TouchEvent) => {
       if (event.touches.length === 2) event.preventDefault()
     }
+    el.addEventListener('wheel', onNativeWheel, { passive: false })
     el.addEventListener('touchmove', onNativeTouchMove, { passive: false })
     return () => {
-      
+      el.removeEventListener('wheel', onNativeWheel)
       el.removeEventListener('touchmove', onNativeTouchMove)
     }
   }, [])
 
+  const touchDistance = (event: React.TouchEvent<HTMLDivElement>) => {
+    const [a, b] = Array.from(event.touches)
+    return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY)
+  }
+
   const onTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 2) return
-    const [first, second] = Array.from(event.touches)
-    pinchDistance.current = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
+    if (event.touches.length === 2) pinchDistance.current = touchDistance(event)
   }
 
   const onTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 2 || pinchDistance.current === null || !onZoomChange) return
-    const [first, second] = Array.from(event.touches)
-    const nextDistance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
-    const delta = nextDistance - pinchDistance.current
+    if (event.touches.length !== 2 || pinchDistance.current === null || !onZoomChangeRef.current) return
+    const next = touchDistance(event)
+    const delta = next - pinchDistance.current
     if (Math.abs(delta) < 8) return
-    event.preventDefault()
-    pinchDistance.current = nextDistance
-    onZoomChange(Math.min(125, Math.max(50, zoom + (delta > 0 ? 5 : -5))))
+    pinchDistance.current = next
+    onZoomChangeRef.current(clampZoom(zoomRef.current + (delta > 0 ? 5 : -5)))
   }
 
   const onTouchEnd = () => {
@@ -84,7 +118,7 @@ export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, 
       className="preview-scroll h-full overflow-auto bg-neutral-200 p-4"
       style={{ touchAction: 'pan-x pan-y' }}
     >
-      <div className="preview-page-layer" style={{ zoom: zoom / 100 }}>
+      <div className="preview-page-layer">
       {pages.length === 0 && <p className="text-neutral-500 text-sm text-center mt-8">No pages yet — compile to preview.</p>}
       {pages.map((p, i) => (
         <PagePlaceholder
@@ -96,6 +130,7 @@ export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, 
           compileSeq={compileSeq}
           renderPage={renderPage}
           observer={observer}
+          zoom={zoom}
         />
       ))}
       </div>

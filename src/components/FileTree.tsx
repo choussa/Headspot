@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FileText, Folder, FolderOpen, Image as ImageIcon } from 'lucide-react'
 import { buildTree, type TreeNode, type ProjectFile } from '../state/workspace'
 
 interface Props {
@@ -22,11 +23,11 @@ function Node({ node, activePath, depth, onOpenFile, onDeleteFile }: {
     return (
       <div>
         <button
-          className="w-full text-left text-neutral-400 hover:text-neutral-200 text-xs py-0.5"
+          className="w-full file-row w-full text-left text-xs py-1"
           style={{ paddingLeft: depth * 12 }}
           onClick={() => setOpen(!open)}
         >
-          {open ? '▾' : '▸'} {node.name}
+          {open ? <FolderOpen size={13} className="inline -mt-0.5 mr-1" /> : <Folder size={13} className="inline -mt-0.5 mr-1" />}{node.name}
         </button>
         {open && node.children.map((c) => (
           <Node key={c.path} node={c} activePath={activePath} depth={depth + 1} onOpenFile={onOpenFile} onDeleteFile={onDeleteFile} />
@@ -38,10 +39,10 @@ function Node({ node, activePath, depth, onOpenFile, onDeleteFile }: {
   return (
     <div className="flex items-center group" style={{ paddingLeft: depth * 12 }}>
       <button
-        className={`flex-1 text-left text-xs py-0.5 truncate ${node.path === activePath ? 'text-blue-400' : 'text-neutral-300 hover:text-white'}`}
+        className={`file-row flex-1 text-left text-xs py-1 truncate ${node.path === activePath ? 'file-row-active' : ''}`}
         onClick={() => onOpenFile(node.path)}
       >
-        {node.kind === 'asset' ? '🖼 ' : ''}{node.name}{isMain ? ' ★' : ''}
+        {node.kind === 'asset' ? <ImageIcon size={12} className="inline -mt-0.5 mr-1" /> : <FileText size={12} className="inline -mt-0.5 mr-1" />}{node.name}{isMain ? ' ★' : ''}
       </button>
       {!isMain && (
         <button
@@ -69,16 +70,16 @@ export function FileTree({ files, activePath, onOpenFile, onNewFile, onDeleteFil
   }
 
   return (
-    <div className="h-full flex flex-col bg-neutral-900 text-neutral-200 text-sm">
-      <div className="p-2 border-b border-neutral-800 text-xs uppercase tracking-wide text-neutral-500">Files</div>
+    <div className="h-full flex flex-col text-sm" style={{background:'var(--panel-bg)',color:'var(--text-primary)'}}>
+      <div className="file-panel-header">Files</div>
       <div className="flex-1 overflow-auto p-2">
         {tree.map((n) => (
           <Node key={n.path} node={n} activePath={activePath} depth={0} onOpenFile={onOpenFile} onDeleteFile={onDeleteFile} />
         ))}
       </div>
-      <div className="p-2 border-t border-neutral-800 flex gap-1">
+      <div className="file-panel-footer">
         <input
-          className="flex-1 bg-neutral-800 rounded px-2 py-1 text-xs"
+          className="file-input flex-1 rounded px-2 py-1 text-xs"
           placeholder="new/file.typ"
           value={newPath}
           onChange={(e) => setNewPath(e.target.value)}
@@ -89,7 +90,7 @@ export function FileTree({ files, activePath, onOpenFile, onNewFile, onDeleteFil
             }
           }}
         />
-        <label className="bg-neutral-800 hover:bg-neutral-700 rounded px-2 py-1 text-xs cursor-pointer">
+        <label className="file-asset-btn rounded px-2 py-1 text-xs cursor-pointer">
           Asset+
           <input type="file" className="hidden" onChange={onFilePicked} />
         </label>

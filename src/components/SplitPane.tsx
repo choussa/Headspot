@@ -28,7 +28,7 @@ export function SplitPane({ left, right, vertical = true }: { left: ReactNode; r
     <div ref={containerRef} className={`flex-1 min-h-0 flex ${vertical ? 'flex-col md:flex-row' : 'flex-col'}`}>
       <div style={{ flex: pct }} className="min-w-0 min-h-0 overflow-hidden">{left}</div>
       <div
-        className="h-1 md:h-auto md:w-1 bg-neutral-300 hover:bg-blue-500 cursor-row-resize md:cursor-col-resize"
+        className="split-handle cursor-row-resize md:cursor-col-resize"
         onPointerDown={onPointerDown}
       />
       <div style={{ flex: 100 - pct }} className="min-w-0 min-h-0 overflow-hidden">{right}</div>

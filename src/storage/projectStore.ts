@@ -4,7 +4,7 @@ import { MAIN_PATH, createProject } from '../state/workspace'
 
 const INDEX_KEY = 'project-index'
 const projectKey = (id: string) => `project:${id}`
-const LEGACY_KEY = 'headspot-project'
+const LEGACY_KEY = 'typst-project'
 
 export async function listProjects(): Promise<ProjectMeta[]> {
   return (await get<ProjectMeta[]>(INDEX_KEY)) ?? []

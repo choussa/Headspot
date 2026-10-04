@@ -6,7 +6,7 @@ import newcmBoldItalic from '@typst-wasm/fonts/NewCM10-BoldItalic.otf?url'
 import newcmMath from '@typst-wasm/fonts/NewCMMath-Regular.otf?url'
 import dejaMono from '@typst-wasm/fonts/DejaVuSansMono.ttf?url'
 
-const FONT_CACHE_KEY = 'headspot-fonts-v1'
+const FONT_CACHE_KEY = 'typst-fonts-v1'
 const FONT_URLS = [newcmReg, newcmBold, newcmItalic, newcmBoldItalic, newcmMath, dejaMono]
 
 export async function loadFonts(): Promise<ArrayBuffer[]> {

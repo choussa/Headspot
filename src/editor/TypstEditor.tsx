@@ -7,6 +7,7 @@ import {
   typstHighlighting,
   typstTheme,
   defaultDarkTheme,
+  defaultLightTheme,
   createTypstCompileSync,
   typstFilePath,
   createTypstHover,
@@ -14,8 +15,10 @@ import {
 } from '@vedivad/codemirror-typst'
 import { autocompletion } from '@codemirror/autocomplete'
 import { lintGutter } from '@codemirror/lint'
+import { search } from '@codemirror/search'
 import { pushDiagnostics } from './diagnostics'
 import type { Diagnostic, TypstProject } from '@vedivad/typst-web-service'
+import type { MutableRefObject } from 'react'
 
 interface Props {
   engine: TypstProject
@@ -27,18 +30,24 @@ interface Props {
   showLineNumbers?: boolean
   fontSize?: number
   fontFamily?: string
+  dark?: boolean
+  externalViewRef?: MutableRefObject<EditorView | null>
+  onCursor?: (offset: number) => void
 }
 
-export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace' }: Props) {
+export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, externalViewRef, onCursor }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const projectRef = useRef<TypstProject | null>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const onCursorRef = useRef(onCursor)
+  onCursorRef.current = onCursor
   const pathCompartment = useRef(new Compartment())
   const wrapCompartment = useRef(new Compartment())
   const gutterCompartment = useRef(new Compartment())
   const fontCompartment = useRef(new Compartment())
+  const themeCompartment = useRef(new Compartment())
 
   useEffect(() => {
     let view: EditorView | null = null
@@ -54,8 +63,11 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
           doc,
           extensions: [
             minimalSetup,
-            oneDark,
-            typstTheme(defaultDarkTheme),
+            themeCompartment.current.of(
+              dark
+                ? [oneDark, typstTheme(defaultDarkTheme)]
+                : [typstTheme(defaultLightTheme)],
+            ),
             gutterCompartment.current.of(showLineNumbers ? lineNumbers() : []),
             wrapCompartment.current.of(wrapLines ? EditorView.lineWrapping : []),
             fontCompartment.current.of(
@@ -70,21 +82,27 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
             createTypstHover({ project }),
             autocompletion({ override: [typstCompletionSource({ project })] }),
             lintGutter(),
+            search(),
             EditorView.updateListener.of((u) => {
               if (u.docChanged) {
                 window.clearTimeout(timer)
                 timer = window.setTimeout(() => onChangeRef.current(u.state.doc.toString()), 150)
+              }
+              if (u.selectionSet) {
+                onCursorRef.current?.(u.state.selection.main.head)
               }
             }),
           ],
         }),
       })
       viewRef.current = view
+      if (externalViewRef) externalViewRef.current = view
     }
 
     return () => {
       window.clearTimeout(timer)
       view?.destroy()
+      if (externalViewRef) externalViewRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -105,6 +123,11 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
       effects: [
         wrapCompartment.current.reconfigure(wrapLines ? EditorView.lineWrapping : []),
         gutterCompartment.current.reconfigure(showLineNumbers ? lineNumbers() : []),
+        themeCompartment.current.reconfigure(
+          dark
+            ? [oneDark, typstTheme(defaultDarkTheme)]
+            : [typstTheme(defaultLightTheme)],
+        ),
         fontCompartment.current.reconfigure(
           EditorView.theme({
             '&': { height: '100%', fontSize: `${fontSize}px` },
@@ -113,7 +136,7 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
         ),
       ],
     })
-  }, [wrapLines, showLineNumbers, fontSize, fontFamily])
+  }, [wrapLines, showLineNumbers, fontSize, fontFamily, dark])
 
   useEffect(() => {
     if (viewRef.current) pushDiagnostics(viewRef.current, diagnostics, activePath)

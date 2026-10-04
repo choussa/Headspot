@@ -30,7 +30,7 @@ const DEFAULTS: Preferences = {
   disableCtrlS: true,
 }
 
-const KEY = 'headspot:preferences'
+const KEY = 'typst:preferences'
 
 export function loadPreferences(): Preferences {
   try {

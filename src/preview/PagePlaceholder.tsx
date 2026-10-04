@@ -8,9 +8,10 @@ interface Props {
   compileSeq: number
   renderPage: (index: number) => Promise<string | undefined>
   observer: IntersectionObserver | null
+  zoom?: number
 }
 
-export function PagePlaceholder({ index, width, height, visible, compileSeq, renderPage, observer }: Props) {
+export function PagePlaceholder({ index, width, height, visible, compileSeq, renderPage, observer, zoom = 100 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [svg, setSvg] = useState<string | null>(null)
 
@@ -33,7 +34,7 @@ export function PagePlaceholder({ index, width, height, visible, compileSeq, ren
       ref={ref}
       data-page={index + 1}
       className="mb-4 mx-auto bg-white shadow"
-      style={{ width: '100%', maxWidth: width, aspectRatio: `${width} / ${height}` }}
+      style={{ width: width * zoom / 100, maxWidth: width * zoom / 100, aspectRatio: `${width} / ${height}` }}
     >
       {svg ? <div className="w-full h-full [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: svg }} /> : null}
     </div>
