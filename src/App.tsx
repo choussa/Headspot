@@ -21,7 +21,7 @@ export default function App() {
   }, [])
 
   if (loading) return <div className="h-screen w-screen bg-neutral-950 flex items-center justify-center text-neutral-500">Loading...</div>
-
+  
   if (!session) {
     return <Auth />
   }

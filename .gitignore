@@ -11,9 +11,6 @@ node_modules
 dist
 dist-ssr
 *.local
-.env
-patch_*.cjs
-patch_*.py
 
 # Editor directories and files
 .vscode/*
