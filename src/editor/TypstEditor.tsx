@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { basicSetup } from 'codemirror'
-import { EditorView } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
+import { minimalSetup } from 'codemirror'
+import { EditorView, lineNumbers } from '@codemirror/view'
+import { Compartment, EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import {
-  TypstProject,
   typstHighlighting,
   typstTheme,
   defaultDarkTheme,
@@ -16,41 +15,56 @@ import {
 import { autocompletion } from '@codemirror/autocomplete'
 import { lintGutter } from '@codemirror/lint'
 import { pushDiagnostics } from './diagnostics'
-import type { Diagnostic } from 'typst-wasm'
+import type { Diagnostic, TypstProject } from '@vedivad/typst-web-service'
 
 interface Props {
+  engine: TypstProject
   doc: string
+  activePath: string
   onChange: (source: string) => void
   diagnostics: Diagnostic[]
+  wrapLines?: boolean
+  showLineNumbers?: boolean
+  fontSize?: number
+  fontFamily?: string
 }
 
-export function TypstEditor({ doc, onChange, diagnostics }: Props) {
+export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const projectRef = useRef<TypstProject | null>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const pathCompartment = useRef(new Compartment())
+  const wrapCompartment = useRef(new Compartment())
+  const gutterCompartment = useRef(new Compartment())
+  const fontCompartment = useRef(new Compartment())
 
   useEffect(() => {
-    let destroyed = false
     let view: EditorView | null = null
     let timer: number | undefined
 
-    ;(async () => {
-      const project = await TypstProject.create()
-      if (destroyed) return
+    {
+      const project = engine
       projectRef.current = project
-      await project.setText('/main.typ', doc)
 
       view = new EditorView({
         parent: containerRef.current!,
         state: EditorState.create({
           doc,
           extensions: [
-            basicSetup,
+            minimalSetup,
             oneDark,
             typstTheme(defaultDarkTheme),
-            typstFilePath.of('/main.typ'),
+            gutterCompartment.current.of(showLineNumbers ? lineNumbers() : []),
+            wrapCompartment.current.of(wrapLines ? EditorView.lineWrapping : []),
+            fontCompartment.current.of(
+              EditorView.theme({
+                '&': { height: '100%', fontSize: `${fontSize}px` },
+                '.cm-scroller': { fontFamily },
+              }),
+            ),
+            pathCompartment.current.of(typstFilePath.of(activePath)),
             typstHighlighting({ project }),
             createTypstCompileSync({ project }),
             createTypstHover({ project }),
@@ -62,18 +76,15 @@ export function TypstEditor({ doc, onChange, diagnostics }: Props) {
                 timer = window.setTimeout(() => onChangeRef.current(u.state.doc.toString()), 150)
               }
             }),
-            EditorView.theme({ '&': { height: '100%' } }),
           ],
         }),
       })
       viewRef.current = view
-    })()
+    }
 
     return () => {
-      destroyed = true
       window.clearTimeout(timer)
       view?.destroy()
-      projectRef.current?.destroy()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -83,11 +94,30 @@ export function TypstEditor({ doc, onChange, diagnostics }: Props) {
     if (view && view.state.doc.toString() !== doc) {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc } })
     }
-  }, [doc])
+    projectRef.current?.setText(activePath, doc)
+    viewRef.current?.dispatch({ effects: pathCompartment.current.reconfigure(typstFilePath.of(activePath)) })
+  }, [doc, activePath])
 
   useEffect(() => {
-    if (viewRef.current) pushDiagnostics(viewRef.current, diagnostics)
-  }, [diagnostics])
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: [
+        wrapCompartment.current.reconfigure(wrapLines ? EditorView.lineWrapping : []),
+        gutterCompartment.current.reconfigure(showLineNumbers ? lineNumbers() : []),
+        fontCompartment.current.reconfigure(
+          EditorView.theme({
+            '&': { height: '100%', fontSize: `${fontSize}px` },
+            '.cm-scroller': { fontFamily },
+          }),
+        ),
+      ],
+    })
+  }, [wrapLines, showLineNumbers, fontSize, fontFamily])
+
+  useEffect(() => {
+    if (viewRef.current) pushDiagnostics(viewRef.current, diagnostics, activePath)
+  }, [diagnostics, activePath])
 
   return <div ref={containerRef} className="h-full overflow-auto" />
 }

@@ -1,15 +1,18 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Props {
-  page: number
+  index: number
   width: number
   height: number
-  svg: string | undefined
+  visible: boolean
+  compileSeq: number
+  renderPage: (index: number) => Promise<string | undefined>
   observer: IntersectionObserver | null
 }
 
-export function PagePlaceholder({ page, width, height, svg, observer }: Props) {
+export function PagePlaceholder({ index, width, height, visible, compileSeq, renderPage, observer }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const [svg, setSvg] = useState<string | null>(null)
 
   useEffect(() => {
     const el = ref.current
@@ -18,10 +21,17 @@ export function PagePlaceholder({ page, width, height, svg, observer }: Props) {
     return () => observer.unobserve(el)
   }, [observer])
 
+  useEffect(() => {
+    if (!visible) return
+    let alive = true
+    renderPage(index).then((s) => { if (alive) setSvg(s ?? null) })
+    return () => { alive = false }
+  }, [visible, index, compileSeq, renderPage])
+
   return (
     <div
       ref={ref}
-      data-page={page}
+      data-page={index + 1}
       className="mb-4 mx-auto bg-white shadow"
       style={{ width: '100%', maxWidth: width, aspectRatio: `${width} / ${height}` }}
     >

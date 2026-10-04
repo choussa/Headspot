@@ -1,62 +1,53 @@
-import type { TypstCompiler, Diagnostic } from 'typst-wasm'
-import { createClient, parseSvgPageSize, type SvgPage } from './typstClient'
+import { TypstProject, type CompileResult } from '@vedivad/typst-web-service'
+import type { ProjectFile } from '../state/workspace'
 
-export interface CompileOutcome {
-  pages: SvgPage[]
-  changedPages: { page: number; output: string }[]
-  totalPages: number
-  diagnostics: Diagnostic[]
-}
+export type { CompileResult }
 
 export class Project {
-  private compiler: TypstCompiler | null = null
+  private vp: TypstProject | null = null
   private seq = 0
-  private pageHashes = new Map<number, string>()
-  private source = ''
 
-  async init(fonts: ArrayBuffer[]) {
-    this.compiler = await createClient(fonts)
+  async init(fonts: ArrayBuffer[]): Promise<void> {
+    this.vp = await TypstProject.create()
+    for (const f of fonts) await this.vp.addFont(new Uint8Array(f))
   }
 
-  private hash(s: string): number {
-    let h = 0
-    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0
-    return h
+  getEngine(): TypstProject | null {
+    return this.vp
   }
 
-  async compile(source: string): Promise<CompileOutcome | null> {
-    if (!this.compiler) throw new Error('compiler not initialized')
+  private async syncFiles(files: ProjectFile[]): Promise<void> {
+    if (!this.vp) throw new Error('compiler not initialized')
+    const wanted = new Map(files.map((f) => [f.path, f]))
+    for (const p of this.vp.files) {
+      if (!wanted.has(p)) await this.vp.remove(p)
+    }
+    const text: Record<string, string | Uint8Array> = {}
+    for (const f of files) {
+      text[f.path] = f.kind === 'source' ? (f.text ?? '') : (f.data ?? new Uint8Array())
+    }
+    if (Object.keys(text).length > 0) await this.vp.setMany(text)
+  }
+
+  async compileProject(files: ProjectFile[]): Promise<CompileResult | null> {
     const mySeq = ++this.seq
-    this.source = source
-    await this.compiler.clearFiles()
-    await this.compiler.addSource('main.typ', source)
-    const res = await this.compiler.compile({ main: 'main.typ', format: 'svg' })
+    await this.syncFiles(files)
+    const res = await this.vp!.compile()
     if (mySeq !== this.seq) return null
+    return res
+  }
 
-    const pages: SvgPage[] = res.pages.map((p) => ({
-      page: p.page,
-      output: p.output,
-      ...parseSvgPageSize(p.output),
-    }))
-    const changedPages = pages
-      .filter((p) => this.pageHashes.get(p.page) !== String(this.hash(p.output)))
-      .map((p) => ({ page: p.page, output: p.output }))
-    this.pageHashes = new Map(pages.map((p) => [p.page, String(this.hash(p.output))]))
-
-    return { pages, changedPages, totalPages: pages.length, diagnostics: res.diagnostics }
+  async renderPage(index: number): Promise<string | undefined> {
+    return this.vp?.renderPage(index)
   }
 
   async exportPdf(): Promise<Uint8Array> {
-    if (!this.compiler) throw new Error('compiler not initialized')
-    const mySeq = ++this.seq
-    await this.compiler.clearFiles()
-    await this.compiler.addSource('main.typ', this.source)
-    const res = await this.compiler.compile({ main: 'main.typ', format: 'pdf' })
-    if (mySeq !== this.seq) throw new Error('stale')
-    return new Uint8Array(res.output)
+    if (!this.vp) throw new Error('compiler not initialized')
+    return (await this.vp.exportPdf()) ?? new Uint8Array()
   }
 
   async dispose() {
-    await this.compiler?.dispose()
+    this.vp?.destroy()
+    this.vp = null
   }
 }

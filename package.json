@@ -22,9 +22,9 @@
     "@vedivad/codemirror-typst": "^0.18.0",
     "codemirror": "^6.0.2",
     "idb-keyval": "^6.3.0",
+    "lucide-react": "^1.52.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "typst-wasm": "^1.0.0"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
