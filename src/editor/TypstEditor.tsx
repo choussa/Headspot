@@ -19,6 +19,8 @@ import { search } from '@codemirror/search'
 import { pushDiagnostics } from './diagnostics'
 import type { Diagnostic, TypstProject } from '@vedivad/typst-web-service'
 import type { MutableRefObject } from 'react'
+import { yCollab } from 'y-codemirror.next'
+import type { CollabSession } from './collab'
 
 interface Props {
   engine: TypstProject
@@ -33,9 +35,10 @@ interface Props {
   dark?: boolean
   externalViewRef?: MutableRefObject<EditorView | null>
   onCursor?: (offset: number) => void
+  collab?: CollabSession | null
 }
 
-export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, externalViewRef, onCursor }: Props) {
+export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, externalViewRef, onCursor, collab }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const projectRef = useRef<TypstProject | null>(null)
@@ -48,6 +51,7 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
   const gutterCompartment = useRef(new Compartment())
   const fontCompartment = useRef(new Compartment())
   const themeCompartment = useRef(new Compartment())
+  const collabCompartment = useRef(new Compartment())
 
   useEffect(() => {
     let view: EditorView | null = null
@@ -77,6 +81,7 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
               }),
             ),
             pathCompartment.current.of(typstFilePath.of(activePath)),
+            collabCompartment.current.of([]),
             typstHighlighting({ project }),
             createTypstCompileSync({ project }),
             createTypstHover({ project }),
@@ -109,12 +114,28 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
 
   useEffect(() => {
     const view = viewRef.current
-    if (view && view.state.doc.toString() !== doc) {
+    if (!view) return
+    if (collab) {
+      const text = collab.ytext.toString()
+      if (view.state.doc.toString() !== text) {
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
+      }
+    } else if (view.state.doc.toString() !== doc) {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc } })
     }
-    projectRef.current?.setText(activePath, doc)
+    projectRef.current?.setText(activePath, collab ? collab.ytext.toString() : doc)
     viewRef.current?.dispatch({ effects: pathCompartment.current.reconfigure(typstFilePath.of(activePath)) })
-  }, [doc, activePath])
+  }, [doc, activePath, collab])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: collabCompartment.current.reconfigure(
+        collab ? yCollab(collab.ytext, collab.awareness, { undoManager: false }) : [],
+      ),
+    })
+  }, [collab])
 
   useEffect(() => {
     const view = viewRef.current

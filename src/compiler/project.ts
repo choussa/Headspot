@@ -16,6 +16,11 @@ export class Project {
     return this.vp
   }
 
+  async addFonts(fonts: ArrayBuffer[]): Promise<void> {
+    if (!this.vp) throw new Error('compiler not initialized')
+    for (const f of fonts) await this.vp.addFont(new Uint8Array(f))
+  }
+
   private async syncFiles(files: ProjectFile[]): Promise<void> {
     if (!this.vp) throw new Error('compiler not initialized')
     const wanted = new Map(files.map((f) => [f.path, f]))

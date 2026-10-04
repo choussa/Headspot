@@ -33,7 +33,7 @@ export function PagePlaceholder({ index, width, height, visible, compileSeq, ren
     <div
       ref={ref}
       data-page={index + 1}
-      className="mb-4 mx-auto bg-white shadow"
+      className="preview-page mx-auto bg-paper"
       style={{ width: width * zoom / 100, maxWidth: width * zoom / 100, aspectRatio: `${width} / ${height}` }}
     >
       {svg ? <div className="w-full h-full [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: svg }} /> : null}

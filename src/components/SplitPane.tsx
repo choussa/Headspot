@@ -4,16 +4,17 @@ export function SplitPane({ left, right, vertical = true }: { left: ReactNode; r
   const [pct, setPct] = useState(50)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  const clamp = (value: number) => Math.min(80, Math.max(20, value))
+
   const onPointerDown = (e: React.PointerEvent) => {
     const container = containerRef.current
     if (!container) return
     const onMove = (ev: PointerEvent) => {
       const rect = container.getBoundingClientRect()
-      const horizontal = vertical
-      const next = horizontal
+      const next = vertical
         ? ((ev.clientX - rect.left) / rect.width) * 100
         : ((ev.clientY - rect.top) / rect.height) * 100
-      setPct(Math.min(80, Math.max(20, next)))
+      setPct(clamp(next))
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -24,12 +25,33 @@ export function SplitPane({ left, right, vertical = true }: { left: ReactNode; r
     e.preventDefault()
   }
 
+  // Arrow keys mirror the drag so the divider is not mouse-only.
+  const onHandleKeyDown = (e: React.KeyboardEvent) => {
+    const decreaseKey = vertical ? 'ArrowLeft' : 'ArrowUp'
+    const increaseKey = vertical ? 'ArrowRight' : 'ArrowDown'
+    if (e.key !== decreaseKey && e.key !== increaseKey && e.key !== 'Home' && e.key !== 'End') return
+    e.preventDefault()
+    if (e.key === 'Home') setPct(20)
+    else if (e.key === 'End') setPct(80)
+    else setPct((p) => clamp(p + (e.key === increaseKey ? 2 : -2)))
+  }
+
+  const isRow = !vertical
+
   return (
     <div ref={containerRef} className={`flex-1 min-h-0 flex ${vertical ? 'flex-col md:flex-row' : 'flex-col'}`}>
       <div style={{ flex: pct }} className="min-w-0 min-h-0 overflow-hidden">{left}</div>
       <div
-        className="split-handle cursor-row-resize md:cursor-col-resize"
+        className="split-handle"
+        role="separator"
+        tabIndex={0}
+        aria-orientation={isRow ? 'horizontal' : 'vertical'}
+        aria-label="Resize editor and preview"
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={20}
+        aria-valuemax={80}
         onPointerDown={onPointerDown}
+        onKeyDown={onHandleKeyDown}
       />
       <div style={{ flex: 100 - pct }} className="min-w-0 min-h-0 overflow-hidden">{right}</div>
     </div>

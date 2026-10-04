@@ -11,7 +11,6 @@ export interface Preferences {
   invertPreview: boolean
   fontSize: number
   fontFamily: string
-  vimMode: boolean
   disableCtrlS: boolean
 }
 
@@ -26,7 +25,6 @@ const DEFAULTS: Preferences = {
   invertPreview: false,
   fontSize: 15,
   fontFamily: '"Cascadia Mono", monospace',
-  vimMode: false,
   disableCtrlS: true,
 }
 
@@ -40,17 +38,36 @@ export function loadPreferences(): Preferences {
   }
 }
 
+const lightQuery = () => window.matchMedia('(prefers-color-scheme: light)')
+
+/** The one place that writes `data-theme`. Every surface reads it through tokens. */
+function applyTheme(theme: Preferences['theme']) {
+  const resolved =
+    theme === 'system' ? (lightQuery().matches ? 'light' : 'dark') : theme
+  document.documentElement.dataset.theme = resolved
+}
+
+/** Idempotent. Called at module load so the first paint is already themed. */
+let themeInitialized = false
+export function initializeTheme() {
+  if (typeof document === 'undefined') return
+  applyTheme(loadPreferences().theme)
+  if (themeInitialized) return
+  themeInitialized = true
+  lightQuery().addEventListener('change', onSystemThemeChange)
+}
+
+function onSystemThemeChange() {
+  if (loadPreferences().theme === 'system') applyTheme('system')
+}
+
+if (typeof document !== 'undefined') initializeTheme()
+
 export function usePreferences() {
   const [prefs, setPrefs] = useState<Preferences>(loadPreferences)
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(prefs))
-    const resolved =
-      prefs.theme === 'system'
-        ? window.matchMedia('(prefers-color-scheme: light)').matches
-          ? 'light'
-          : 'dark'
-        : prefs.theme
-    document.documentElement.dataset.theme = resolved
+    applyTheme(prefs.theme)
   }, [prefs])
   const update = useCallback(
     <K extends keyof Preferences>(key: K, value: Preferences[K]) =>

@@ -4,10 +4,15 @@ import { supabase } from './lib/supabase'
 import { Auth } from './components/Auth'
 import { Dashboard } from './pages/Dashboard'
 import { EditorPage } from './pages/EditorPage'
+import { initializeTheme } from './state/preferences'
 
 export default function App() {
   const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    initializeTheme()
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -20,7 +25,11 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  if (loading) return <div className="h-screen w-screen bg-neutral-950 flex items-center justify-center text-neutral-500">Loading...</div>
+  if (loading) return (
+    <div className="flex h-screen w-screen items-center justify-center bg-app text-fg-3">
+      <span role="status" aria-live="polite">Loading…</span>
+    </div>
+  )
   
   if (!session) {
     return <Auth />

@@ -115,11 +115,11 @@ export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, 
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      className="preview-scroll h-full overflow-auto bg-neutral-200 p-4"
+      className="preview-scroll h-full overflow-auto bg-preview p-4"
       style={{ touchAction: 'pan-x pan-y' }}
     >
       <div className="preview-page-layer">
-      {pages.length === 0 && <p className="text-neutral-500 text-sm text-center mt-8">No pages yet — compile to preview.</p>}
+      {pages.length === 0 && <p className="mt-8 text-center text-sm text-fg-2">No pages yet — compile to preview.</p>}
       {pages.map((p, i) => (
         <PagePlaceholder
           key={i}

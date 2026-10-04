@@ -7,7 +7,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   static getDerivedStateFromError(error: Error) { return { error } }
   render() {
     if (this.state.error) {
-      return <div className="p-4 text-red-400 text-sm">Preview error: {this.state.error.message}</div>
+      return <div className="p-4 text-sm text-danger">Preview error: {this.state.error.message}</div>
     }
     return this.props.children
   }

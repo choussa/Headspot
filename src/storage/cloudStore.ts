@@ -172,6 +172,10 @@ export async function deleteFolder(id: string): Promise<void> {
   await supabase.from('folders').delete().eq('id', id)
 }
 
+export async function renameFolder(id: string, name: string): Promise<void> {
+  await supabase.from('folders').update({ name }).eq('id', id)
+}
+
 export async function moveProject(projectId: string, folderId: string | null): Promise<void> {
   await supabase.from('projects').update({ folder_id: folderId }).eq('id', projectId)
 }
