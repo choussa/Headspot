@@ -29,6 +29,9 @@ import { OutlinePanel } from '../components/OutlinePanel'
 import { HistoryPanel } from '../components/HistoryPanel'
 import { CopilotPanel } from '../components/CopilotPanel'
 import { takeSnapshot, type Snapshot } from '../storage/history'
+import { listComments, saveComments, type ProjectComment } from '../storage/comments'
+import { CommentsPanel } from '../components/CommentsPanel'
+import { PresentationMode } from '../components/PresentationMode'
 import { ExportPanel } from '../components/ExportPanel'
 import { ConfirmDialog, PromptDialog } from '../components/Dialogs'
 import {
@@ -69,6 +72,8 @@ export function EditorPage() {
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [newFileOpen, setNewFileOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
+  const [presenting, setPresenting] = useState(false)
+  const [comments, setComments] = useState<ProjectComment[]>([])
   const [email, setEmail] = useState<string | null>(null)
   const [exportPanelOpen, setExportPanelOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -289,6 +294,7 @@ export function EditorPage() {
     { label: 'Settings panel', checked: activePanel === 'settings', onSelect: () => setActivePanel(activePanel === 'settings' ? null : 'settings') },
     { label: 'Version history', checked: activePanel === 'history', onSelect: () => setActivePanel(activePanel === 'history' ? null : 'history') },
     { label: 'Copilot assistant', checked: activePanel === 'copilot', onSelect: () => setActivePanel(activePanel === 'copilot' ? null : 'copilot') },
+    { label: 'Comments', checked: activePanel === 'comments', onSelect: () => setActivePanel(activePanel === 'comments' ? null : 'comments') },
     { label: 'Show toolbar', checked: prefs.showToolbar, onSelect: () => update('showToolbar', !prefs.showToolbar) },
     { label: 'Scroll on type', checked: prefs.scrollOnType, onSelect: () => update('scrollOnType', !prefs.scrollOnType) },
     { label: 'Wrap lines', checked: prefs.wrapLines, onSelect: () => update('wrapLines', !prefs.wrapLines) },
@@ -305,7 +311,7 @@ export function EditorPage() {
     },
     { label: 'Only show editor', onSelect: () => update('showBothPanels', false) },
     { label: 'Show both panels', checked: prefs.showBothPanels, onSelect: () => update('showBothPanels', true) },
-    { label: 'Present', pro: true, disabled: true },
+    { label: 'Present', onSelect: () => setPresenting(true) },
     { label: 'Speaker mode', pro: true, disabled: true },
   ]
 
@@ -397,6 +403,35 @@ export function EditorPage() {
   }, [record])
 
   const activeFile = record ? fileByPath(record.files, activeFilePath) : undefined
+
+  const onAddComment = useCallback((text: string) => {
+    const r = recordRef.current
+    if (!r) return
+    const v = editorViewRef.current
+    const sel = v?.state.selection.main
+    const from = sel?.from ?? 0
+    const to = sel?.to ?? from
+    const next: ProjectComment[] = [...comments, { id: crypto.randomUUID(), path: activeFilePath, from, to, text, author: email?.split('@')[0] ?? 'You', ts: Date.now(), resolved: false }]
+    setComments(next)
+    saveComments(r.meta.id, next)
+  }, [comments, activeFilePath, email])
+
+  const onResolveComment = useCallback((id: string) => {
+    const r = recordRef.current
+    if (!r) return
+    const next = comments.map((c) => (c.id === id ? { ...c, resolved: !c.resolved } : c))
+    setComments(next)
+    saveComments(r.meta.id, next)
+  }, [comments])
+
+  const onDeleteComment = useCallback((id: string) => {
+    const r = recordRef.current
+    if (!r) return
+    const next = comments.filter((c) => c.id !== id)
+    setComments(next)
+    saveComments(r.meta.id, next)
+  }, [comments])
+
 
   const editorViewRef = useRef<EditorView | null>(null)
   const recordRef = useRef(record)
@@ -504,6 +539,12 @@ export function EditorPage() {
     }
   }, [])
 
+  const [currentSelection, setCurrentSelection] = useState('')
+
+  useEffect(() => {
+    if (record) setComments(listComments(record.meta.id))
+  }, [record?.meta.id])
+
   const onEditorCursor = useCallback((offset: number) => {
     window.clearTimeout(cursorTimer.current)
     cursorTimer.current = window.setTimeout(() => {
@@ -536,6 +577,14 @@ export function EditorPage() {
     }
   }, [activeFilePath])
 
+  const onJumpComment = useCallback((path: string, from: number) => {
+    const v = editorViewRef.current
+    let line = 1
+    if (v && path === activeFilePath) {
+      try { line = v.state.doc.lineAt(from).number } catch { line = 1 }
+    }
+    onSourceJump(path, line, 1)
+  }, [activeFilePath, onSourceJump])
 
   useEffect(() => {
     if (!record) return
@@ -823,6 +872,17 @@ export function EditorPage() {
             onRestore={onRestoreSnapshot}
           />
         )}
+        {activePanel === 'comments' && (
+          <CommentsPanel
+            comments={comments}
+            activePath={activeFilePath}
+            currentSelection={currentSelection}
+            onAdd={onAddComment}
+            onJump={onJumpComment}
+            onResolve={onResolveComment}
+            onDelete={onDeleteComment}
+          />
+        )}
         {activePanel === 'copilot' && (
           <CopilotPanel onInsert={onCopilotInsert} getSelection={() => { const v = editorViewRef.current; return v ? v.state.sliceDoc(v.state.selection.main.from, v.state.selection.main.to) : '' }} />
         )}
@@ -859,8 +919,16 @@ export function EditorPage() {
                 vimMode={prefs.vimMode}
                 writingDirection={prefs.writingDirection}
                 spellcheck={prefs.spellcheck}
+                commentRanges={comments.filter((c) => c.path === activeFilePath && !c.resolved).map((c) => ({ from: c.from, to: c.to }))}
                 externalViewRef={editorViewRef}
-                onCursor={onEditorCursor}
+                onCursor={(offset) => {
+                  onEditorCursor(offset)
+                  const v = editorViewRef.current
+                  if (v) {
+                    const { from, to } = v.state.selection.main
+                    setCurrentSelection(v.state.sliceDoc(from, to))
+                  }
+                }}
                 collab={collabSession}
               />
             ) : (
@@ -873,6 +941,10 @@ export function EditorPage() {
       </div>
         </main>
       </div>
+
+      {presenting && (
+        <PresentationMode pages={pages} renderPage={(i) => project.renderPage(i)} onExit={() => setPresenting(false)} />
+      )}
 
       <PromptDialog
         open={shareUrl !== null}
