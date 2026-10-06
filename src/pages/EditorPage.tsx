@@ -452,6 +452,47 @@ export function EditorPage() {
     view.focus()
   }, [])
 
+  const insertImage = useCallback((name: string) => {
+    const snippet = `#image("/assets/${name}")\n`
+    const view = editorViewRef.current
+    if (!view) {
+      setRecord((prev) => {
+        if (!prev) return prev
+        const f = fileByPath(prev.files, activeFilePath)
+        if (!f || f.kind !== 'source') return prev
+        const next = { ...prev, files: setFileText(prev.files, activeFilePath, (f.text ?? '') + '\n' + snippet) }
+        persist(next)
+        return next
+      })
+      return
+    }
+    const { from, to } = view.state.selection.main
+    view.dispatch({ changes: { from, to, insert: snippet }, selection: { anchor: from + snippet.length } })
+    view.focus()
+  }, [activeFilePath, persist])
+
+  const handleDocDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    for (const f of Array.from(e.dataTransfer.files)) {
+      const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)
+      if (!isImage) continue
+      const buf = new Uint8Array(await f.arrayBuffer())
+      onUploadAsset(`/assets/${f.name}`, buf)
+      insertImage(f.name)
+    }
+  }, [onUploadAsset, insertImage])
+
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault()
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', prevent)
+    }
+  }, [])
+
   const onEditorCursor = useCallback((offset: number) => {
     window.clearTimeout(cursorTimer.current)
     cursorTimer.current = window.setTimeout(() => {
@@ -772,7 +813,7 @@ export function EditorPage() {
           />
         )}
         {activePanel === 'copilot' && (
-          <CopilotPanel onInsert={onCopilotInsert} />
+          <CopilotPanel onInsert={onCopilotInsert} getSelection={() => { const v = editorViewRef.current; return v ? v.state.sliceDoc(v.state.selection.main.from, v.state.selection.main.to) : '' }} />
         )}
         {activePanel === 'settings' && (
           <SettingsPanel
@@ -784,6 +825,11 @@ export function EditorPage() {
             onMoveFolder={onMoveFolder}
           />
         )}
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDocDrop}
+          className="flex min-w-0 min-h-0 flex-1 flex-col"
+        >
         <SplitPane
           vertical={prefs.splitVertical}
           left={
@@ -812,6 +858,7 @@ export function EditorPage() {
           }
           right={prefs.showBothPanels ? <ErrorBoundary><div className={prefs.invertPreview ? 'invert-preview h-full' : 'h-full'}><div className="flex h-full"><div className="min-w-0 flex-1"><VirtualizedPreview pages={pages} compileSeq={compileSeq} renderPage={(i) => project.renderPage(i)} zoom={zoom} onZoomChange={setZoom} engine={project.getEngine()} navRef={navRef} onSourceJump={onSourceJump} /></div>{exportPanelOpen && <ExportPanel onExportPdf={onExportPdf} onExportSources={onExportSources} onExportSvg={onExportSvg} onExportPng={onExportPng} exportingFormat={exportingFormat} pageCount={pages.length} fileCount={record?.files.length ?? 0} />}</div></div></ErrorBoundary> : null}
         />
+        </div>
       </div>
         </main>
       </div>

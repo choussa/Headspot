@@ -27,7 +27,7 @@ export async function askAi(config: AiConfig, prompt: string, history: ChatMsg[]
   return json.choices?.[0]?.message?.content ?? ''
 }
 
-export function CopilotPanel({ onInsert }: { onInsert: (code: string) => void }) {
+export function CopilotPanel({ onInsert, getSelection }: { onInsert: (code: string) => void; getSelection?: () => string }) {
   const [config, setConfig] = useState<AiConfig>(loadAiConfig)
   const [history, setHistory] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
@@ -75,7 +75,32 @@ export function CopilotPanel({ onInsert }: { onInsert: (code: string) => void })
             </div>
           ))}
         </div>
-        <div className="p-2 border-t border-line flex gap-1">
+        <div className="p-2 border-t border-line flex flex-col gap-2">
+          {getSelection && (
+            <button
+              className="rounded border border-line px-2 py-1 text-xs text-fg-2 hover:text-fg self-start"
+              disabled={busy}
+              onClick={async () => {
+                const sel = getSelection().trim()
+                if (!sel || busy) return
+                setBusy(true)
+                const prompt = `Fix the syntax of this Typst math code and return only the corrected code in a typst code block:\n\n${sel}`
+                const next = [...history, { role: 'user' as const, content: prompt }]
+                setHistory(next)
+                try {
+                  const answer = await askAi(config, prompt, history)
+                  setHistory([...next, { role: 'assistant', content: answer }])
+                } catch (e) {
+                  setHistory([...next, { role: 'assistant', content: e instanceof Error ? e.message : 'AI request failed' }])
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              Fix my math
+            </button>
+          )}
+          <div className="flex gap-1">
           <input
             className="file-input flex-1 rounded px-2 py-1 text-xs"
             placeholder="Ask Copilot…"
@@ -84,6 +109,7 @@ export function CopilotPanel({ onInsert }: { onInsert: (code: string) => void })
             onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
           />
           <button className="rounded border border-line px-2 py-1 text-xs" disabled={busy} onClick={() => void send()}>{busy ? '…' : 'Send'}</button>
+          </div>
         </div>
       </div>
     </div>
