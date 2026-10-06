@@ -1,0 +1,6 @@
+name: Quarterly Report
+description: Quarterly business review.
+variables:
+  - id: quarter
+    type: string
+    default: "Q1 2026"

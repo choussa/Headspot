@@ -4,15 +4,8 @@ import {
   Plus, Cloud, MoreVertical, LayoutGrid, List, FileText, Folder, ChevronRight,
   Loader2, TriangleAlert, RefreshCw, Monitor, Sun, Moon,
 } from 'lucide-react'
-import blankTpl from '../templates/blank.typ?raw'
-import statusTpl from '../templates/project-status.typ?raw'
-import quarterlyTpl from '../templates/quarterly-report.typ?raw'
+import { TemplateDialog } from '../components/TemplateDialog'
 
-const TEMPLATES = [
-  { id: 'blank', name: 'Blank Document', source: blankTpl },
-  { id: 'project-status', name: 'Project Status', source: statusTpl },
-  { id: 'quarterly-report', name: 'Quarterly Report', source: quarterlyTpl },
-]
 import {
   listProjects, createNewCloudProject, deleteProject,
   loadProject, saveProject, listFolders, createFolder,
@@ -172,14 +165,6 @@ export function Dashboard() {
     run(async () => {
       const id = await createNewCloudProject('Untitled Document', '#set page(paper: "a4")\n\n= New Document\nStart typing here...')
       if (!id) throw new Error('Could not create a document. Check your connection and try again.')
-      navigate(`/editor/${id}`)
-    })
-
-  const handleCreateFromTemplate = (t: (typeof TEMPLATES)[number]) =>
-    run(async () => {
-      const id = await createNewCloudProject(t.name, t.source)
-      if (!id) throw new Error('Could not create a document. Check your connection and try again.')
-      setShowTemplates(false)
       navigate(`/editor/${id}`)
     })
 
@@ -563,29 +548,17 @@ export function Dashboard() {
       </div>
 
       {showTemplates && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={() => setShowTemplates(false)}>
-          <div className="w-full max-w-md rounded-xl border border-line bg-panel p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-lg font-semibold text-fg">Start from a template</h2>
-            <div className="flex flex-col gap-2">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => handleCreateFromTemplate(t)}
-                  disabled={busy}
-                  className="rounded-lg border border-line px-4 py-3 text-left text-sm font-medium text-fg transition-colors hover:bg-raised disabled:opacity-50"
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowTemplates(false)}
-              className="mt-4 rounded-lg border border-line px-4 py-2 text-sm text-fg-2 transition-colors hover:bg-raised"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <TemplateDialog
+          onClose={() => setShowTemplates(false)}
+          onCreate={(name, source) => {
+            void run(async () => {
+              const id = await createNewCloudProject(name, source)
+              if (!id) throw new Error('Could not create a document. Check your connection and try again.')
+              setShowTemplates(false)
+              navigate(`/editor/${id}`)
+            })
+          }}
+        />
       )}
 
       {menu && (

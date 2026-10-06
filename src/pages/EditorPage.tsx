@@ -139,6 +139,11 @@ export function EditorPage() {
       if (loaded) {
         setRecord(loaded)
         setActiveFilePath('/main.typ')
+        for (const f of loaded.files) {
+          if (f.kind === 'asset' && f.data && /\.(ttf|otf|ttc)$/i.test(f.path)) {
+            await project.addFonts([f.data.slice().buffer as ArrayBuffer])
+          }
+        }
         await runCompile(loaded.files)
       } else {
         navigate('/')
@@ -188,6 +193,9 @@ export function EditorPage() {
   const onUploadAsset = useCallback((path: string, data: Uint8Array) => {
     if (!record) return
     updateFiles(addAsset(record.files, path, data))
+    if (/\.(ttf|otf|ttc)$/i.test(path)) {
+      void project.addFonts([data.slice().buffer as ArrayBuffer])
+    }
   }, [record, updateFiles])
 
   const onDeleteProject = useCallback(async () => {

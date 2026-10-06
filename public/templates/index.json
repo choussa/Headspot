@@ -1,0 +1,6 @@
+[
+  { "id": "blank", "name": "Blank Document", "description": "Empty A4 page.", "path": "blank" },
+  { "id": "academic", "name": "Academic Paper", "description": "Two-column academic layout.", "path": "academic" },
+  { "id": "status", "name": "Project Status", "description": "Status report layout.", "path": "status" },
+  { "id": "quarterly", "name": "Quarterly Report", "description": "Quarterly business review.", "path": "quarterly" }
+]

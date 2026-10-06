@@ -1,0 +1,6 @@
+name: Project Status
+description: Weekly status report.
+variables:
+  - id: project
+    type: string
+    default: "Project X"

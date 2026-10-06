@@ -39,7 +39,7 @@
 .file-panel input { border: 1px solid var(--control-line); color: var(--text-primary); }
 .file-panel label { border: 1px solid var(--border); color: var(--text-secondary); }
 .editor-workspace > div:last-child { background: var(--preview-bg); }
-.editor-workspace .cm-editor { background: var(--editor-bg); color: var(--text-primary); font-size: 13px; }
+.editor-workspace .cm-editor { background: var(--editor-bg); color: var(--text-primary); }
 .editor-workspace .cm-scroller { padding-top: 8px; }
 /* CodeMirror's base theme hard-codes the gutter colour, which falls below AA in dark. */
 .editor-workspace .cm-gutters { background: var(--editor-bg); color: var(--text-muted); border-color: var(--border); }

@@ -1,0 +1,9 @@
+name: Academic Paper
+description: Standard article layout.
+variables:
+  - id: title
+    type: string
+    default: "My Paper"
+  - id: author
+    type: string
+    default: "Jane Doe"
