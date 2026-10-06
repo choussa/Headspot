@@ -1,4 +1,4 @@
-import YAML from 'yaml'
+import { parse } from 'smol-toml'
 
 export interface TemplateVariable {
   id: string
@@ -17,6 +17,10 @@ export interface TemplateIndexEntry {
   name: string
   description: string
   path: string
+  category?: string
+  discipline?: string
+  author?: string
+  thumbnailUrl?: string
 }
 
 export async function fetchTemplateIndex(): Promise<TemplateIndexEntry[]> {
@@ -26,11 +30,24 @@ export async function fetchTemplateIndex(): Promise<TemplateIndexEntry[]> {
 }
 
 export async function fetchTemplateMeta(path: string): Promise<TemplateMeta> {
-  const res = await fetch(`/templates/${path}/template.yaml`)
+  const res = await fetch(`/templates/${path}/typst.toml`)
   if (!res.ok) throw new Error('Could not load template')
   const text = await res.text()
-  const doc = YAML.parse(text)
-  return { name: doc.name ?? path, description: doc.description ?? '', variables: doc.variables ?? [] }
+  const doc = parse(text) as any
+  
+  const packageMeta = doc.package || {}
+  
+  // Custom extension: allow template variables in [template.variables]
+  let variables = []
+  if (doc.template && Array.isArray(doc.template.variables)) {
+    variables = doc.template.variables
+  }
+
+  return { 
+    name: packageMeta.name ?? path, 
+    description: packageMeta.description ?? '', 
+    variables 
+  }
 }
 
 export async function fetchTemplateSource(path: string): Promise<string> {
