@@ -39,7 +39,7 @@ import {
   ArrowLeft, Search, Settings, Download, Undo2, Redo2, Loader2,
   RotateCw, Minus, Plus, Maximize2, ChevronDown, List, ListOrdered, Sigma, Code, AtSign,
   TriangleAlert,
-  BookOpen, Package, CircleHelp, Cloud, Terminal, Layout, Book, Files
+  BookOpen, Package, CircleHelp, Cloud, Layout, Book, Files
 } from 'lucide-react'
 
 const project = new Project()
@@ -86,7 +86,6 @@ export function EditorPage() {
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pendingDeleteFile, setPendingDeleteFile] = useState<string | null>(null)
-  const [showDiagnostics, setShowDiagnostics] = useState(false)
   const { prefs, update } = usePreferences()
   const compileTimer = useRef<number | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
@@ -304,6 +303,7 @@ export function EditorPage() {
     { label: 'Version history', checked: activePanel === 'history', onSelect: () => setActivePanel(activePanel === 'history' ? null : 'history') },
     { label: 'Copilot assistant', checked: activePanel === 'copilot', onSelect: () => setActivePanel(activePanel === 'copilot' ? null : 'copilot') },
     { label: 'Comments', checked: activePanel === 'comments', onSelect: () => setActivePanel(activePanel === 'comments' ? null : 'comments') },
+    { label: 'Improve', checked: activePanel === 'improve', onSelect: () => setActivePanel(activePanel === 'improve' ? null : 'improve') },
     { label: 'Show toolbar', checked: prefs.showToolbar, onSelect: () => update('showToolbar', !prefs.showToolbar) },
     { label: 'Scroll on type', checked: prefs.scrollOnType, onSelect: () => update('scrollOnType', !prefs.scrollOnType) },
     { label: 'Wrap lines', checked: prefs.wrapLines, onSelect: () => update('wrapLines', !prefs.wrapLines) },
@@ -345,7 +345,7 @@ export function EditorPage() {
 
   const helpItems: MenuItem[] = [
     { label: 'Typst documentation', onSelect: () => window.open('https://typst.app/docs/', '_blank', 'noopener,noreferrer') },
-    { label: 'Compiler problems', checked: showDiagnostics, onSelect: () => setShowDiagnostics((v) => !v) },
+    { label: 'Compiler problems', checked: activePanel === 'improve', onSelect: () => setActivePanel(activePanel === 'improve' ? null : 'improve') },
     { label: 'Settings', onSelect: () => setActivePanel(activePanel === 'settings' ? null : 'settings') },
   ]
 
@@ -692,23 +692,6 @@ export function EditorPage() {
             <button aria-label="Undo" title="Undo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) undo(v) }}><Undo2 size={15} /></button>
             <button aria-label="Redo" title="Redo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) redo(v) }}><Redo2 size={15} /></button>
             <div className="w-px h-4 bg-line mx-1" />
-            <button
-              aria-label="Compiler problems"
-              title="Compiler problems"
-              className={`p-1 hover:bg-raised rounded ${showDiagnostics ? 'text-white' : 'text-fg'}`}
-              onClick={() => setShowDiagnostics((v) => !v)}
-            >
-              <Terminal size={15} />
-              {diagnostics.length > 0 && (
-                <span
-                  aria-label={`${diagnostics.length} problems`}
-                  className="ml-1 rounded-full px-1 text-[10px] text-white"
-                  style={{ background: 'var(--danger-fill)' }}
-                >
-                  {diagnostics.length}
-                </span>
-              )}
-            </button>
             <div className="w-px h-4 bg-line mx-1" />
             <button aria-label="Zoom out" title="Zoom out" className="p-1 hover:bg-raised rounded text-fg" onClick={() => setZoom(z => Math.max(25, z - 10))}><Minus size={15} /></button>
             <span className="text-xs w-10 text-center font-medium">{zoom}%</span>
@@ -771,6 +754,10 @@ export function EditorPage() {
           <button aria-label="Help" title="Typst documentation" className="p-2 rounded text-fg-2 hover:text-fg" onClick={() => window.open('https://typst.app/docs/', '_blank', 'noopener,noreferrer')}>
             <CircleHelp size={18} />
           </button>
+          <button aria-label="Improve" title="Improve" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'improve' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'improve' ? null : 'improve')}>
+            <TriangleAlert size={18} />
+            {diagnostics.length > 0 && <span className="ml-1 rounded-full px-1 text-[10px] text-white" style={{ background: 'var(--danger-fill)' }}>{diagnostics.length}</span>}
+          </button>
           <button aria-label="Toggle settings panel" title="Settings" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'settings' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}>
             <Settings size={18} />
           </button>
@@ -781,31 +768,6 @@ export function EditorPage() {
               <Loader2 size={26} className="animate-spin" />
               <span className="sr-only">Preparing the Typst compiler</span>
             </div>
-          )}
-          {showDiagnostics && diagnostics.length > 0 && (
-            <ul className="diagnostics-banner" aria-label="Compiler problems">
-              {diagnostics.map((d, i) => (
-                <li key={i}>
-                  <button
-                    className="flex w-full items-center gap-2 text-left"
-                    onClick={() => {
-                      if (!d.location) return
-                      onSourceJump(d.location.file, d.location.line, d.location.column)
-                      setShowDiagnostics(false)
-                    }}
-                    disabled={!d.location}
-                  >
-                    <TriangleAlert size={12} className="shrink-0" />
-                    <span className="truncate">{d.message}</span>
-                    {d.location && (
-                      <span className="tnum shrink-0 opacity-70">
-                        {d.location.file}:{d.location.line}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
           )}
           {prefs.showToolbar && (
           <div className="flex items-center gap-2 p-2 bg-topbar border-b border-line">
@@ -862,6 +824,37 @@ export function EditorPage() {
         )}
         {activePanel === 'copilot' && (
           <CopilotPanel onInsert={onCopilotInsert} getSelection={() => { const v = editorViewRef.current; return v ? v.state.sliceDoc(v.state.selection.main.from, v.state.selection.main.to) : '' }} />
+        )}
+        {activePanel === 'improve' && (
+          <div className="file-panel">
+            <div className="h-full flex flex-col text-sm" style={{ background: 'var(--panel-bg)' }}>
+              <div className="file-panel-header">Improve</div>
+              <div className="flex-1 overflow-auto p-2">
+                {diagnostics.length === 0 ? (
+                  <p className="text-xs text-fg-3 p-1">No problems found.</p>
+                ) : (
+                  <ul aria-label="Compiler problems">
+                    {diagnostics.map((d, i) => (
+                      <li key={i}>
+                        <button
+                          className="flex w-full items-center gap-2 text-left text-xs py-1"
+                          onClick={() => {
+                            if (!d.location) return
+                            onSourceJump(d.location.file, d.location.line, d.location.column)
+                          }}
+                          disabled={!d.location}
+                        >
+                          <TriangleAlert size={12} className="shrink-0" />
+                          <span className="truncate">{d.message}</span>
+                          {d.location && <span className="tnum shrink-0 opacity-70">{d.location.file}:{d.location.line}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
         )}
         {activePanel === 'settings' && (
           <SettingsPanel
