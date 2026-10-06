@@ -37,23 +37,26 @@ export function SplitPane({ left, right, vertical = true }: { left: ReactNode; r
   }
 
   const isRow = !vertical
+  const hasRight = right !== null && right !== undefined && right !== false
 
   return (
-    <div ref={containerRef} className={`flex-1 min-h-0 flex ${vertical ? 'flex-col md:flex-row' : 'flex-col'}`}>
-      <div style={{ flex: pct }} className="min-w-0 min-h-0 overflow-hidden">{left}</div>
-      <div
-        className="split-handle"
-        role="separator"
-        tabIndex={0}
-        aria-orientation={isRow ? 'horizontal' : 'vertical'}
-        aria-label="Resize editor and preview"
-        aria-valuenow={Math.round(pct)}
-        aria-valuemin={20}
-        aria-valuemax={80}
-        onPointerDown={onPointerDown}
-        onKeyDown={onHandleKeyDown}
-      />
-      <div style={{ flex: 100 - pct }} className="min-w-0 min-h-0 overflow-hidden">{right}</div>
+    <div ref={containerRef} className={`flex-1 min-w-0 min-h-0 flex ${vertical ? 'flex-col md:flex-row' : 'flex-col'}`}>
+      <div style={{ flex: hasRight ? `${pct} 1 0%` : '1 1 0%' }} className="min-w-0 min-h-0 overflow-hidden">{left}</div>
+      {hasRight && (
+        <div
+          className="split-handle"
+          role="separator"
+          tabIndex={0}
+          aria-orientation={isRow ? 'horizontal' : 'vertical'}
+          aria-label="Resize editor and preview"
+          aria-valuenow={Math.round(pct)}
+          aria-valuemin={20}
+          aria-valuemax={80}
+          onPointerDown={onPointerDown}
+          onKeyDown={onHandleKeyDown}
+        />
+      )}
+      {hasRight && <div style={{ flex: `${100 - pct} 1 0%` }} className="min-w-0 min-h-0 overflow-hidden">{right}</div>}
     </div>
   )
 }

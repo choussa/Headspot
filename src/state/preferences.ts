@@ -12,6 +12,12 @@ export interface Preferences {
   fontSize: number
   fontFamily: string
   disableCtrlS: boolean
+  vimMode: boolean
+  writingDirection: 'ltr' | 'rtl'
+  spellcheck: boolean
+  personalDictionary: string
+  previewedFile: string
+  experimental: boolean
 }
 
 const DEFAULTS: Preferences = {
@@ -26,6 +32,12 @@ const DEFAULTS: Preferences = {
   fontSize: 15,
   fontFamily: '"Cascadia Mono", monospace',
   disableCtrlS: true,
+  vimMode: false,
+  writingDirection: 'ltr',
+  spellcheck: false,
+  personalDictionary: '',
+  previewedFile: '/main.typ',
+  experimental: false,
 }
 
 const KEY = 'typst:preferences'

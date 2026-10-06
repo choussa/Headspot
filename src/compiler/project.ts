@@ -1,7 +1,7 @@
-import { TypstProject, type CompileResult } from '@vedivad/typst-web-service'
+import { TypstProject, type CompileResult, type RenderedSvgPage } from '@vedivad/typst-web-service'
 import type { ProjectFile } from '../state/workspace'
 
-export type { CompileResult }
+export type { CompileResult, RenderedSvgPage }
 
 export class Project {
   private vp: TypstProject | null = null
@@ -14,6 +14,10 @@ export class Project {
 
   getEngine(): TypstProject | null {
     return this.vp
+  }
+
+  setEntry(path: string): void {
+    if (this.vp) this.vp.entry = path
   }
 
   async addFonts(fonts: ArrayBuffer[]): Promise<void> {
@@ -44,6 +48,12 @@ export class Project {
 
   async renderPage(index: number): Promise<string | undefined> {
     return this.vp?.renderPage(index)
+  }
+
+  /** Every page of the last compile with its own SVG, for multi-page export. */
+  async renderedPages(start: number, end: number): Promise<RenderedSvgPage[]> {
+    if (!this.vp) throw new Error('compiler not initialized')
+    return this.vp.renderedPages(start, end)
   }
 
   async exportPdf(): Promise<Uint8Array> {

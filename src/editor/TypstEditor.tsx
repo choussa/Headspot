@@ -16,6 +16,7 @@ import {
 import { autocompletion } from '@codemirror/autocomplete'
 import { lintGutter } from '@codemirror/lint'
 import { search } from '@codemirror/search'
+import { vim } from '@replit/codemirror-vim'
 import { pushDiagnostics } from './diagnostics'
 import type { Diagnostic, TypstProject } from '@vedivad/typst-web-service'
 import type { MutableRefObject } from 'react'
@@ -33,12 +34,15 @@ interface Props {
   fontSize?: number
   fontFamily?: string
   dark?: boolean
+  vimMode?: boolean
+  writingDirection?: 'ltr' | 'rtl'
+  spellcheck?: boolean
   externalViewRef?: MutableRefObject<EditorView | null>
   onCursor?: (offset: number) => void
   collab?: CollabSession | null
 }
 
-export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, externalViewRef, onCursor, collab }: Props) {
+export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, vimMode = false, writingDirection = 'ltr', spellcheck = false, externalViewRef, onCursor, collab }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const projectRef = useRef<TypstProject | null>(null)
@@ -51,6 +55,7 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
   const gutterCompartment = useRef(new Compartment())
   const fontCompartment = useRef(new Compartment())
   const themeCompartment = useRef(new Compartment())
+  const vimCompartment = useRef(new Compartment())
   const collabCompartment = useRef(new Compartment())
 
   useEffect(() => {
@@ -81,6 +86,7 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
               }),
             ),
             pathCompartment.current.of(typstFilePath.of(activePath)),
+            vimCompartment.current.of(vimMode ? vim({ status: true }) : []),
             collabCompartment.current.of([]),
             typstHighlighting({ project }),
             createTypstCompileSync({ project }),
@@ -160,8 +166,21 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
   }, [wrapLines, showLineNumbers, fontSize, fontFamily, dark])
 
   useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: vimCompartment.current.reconfigure(vimMode ? vim({ status: true }) : []),
+    })
+  }, [vimMode])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (view) view.contentDOM.spellcheck = spellcheck
+  }, [spellcheck])
+
+  useEffect(() => {
     if (viewRef.current) pushDiagnostics(viewRef.current, diagnostics, activePath)
   }, [diagnostics, activePath])
 
-  return <div ref={containerRef} className="h-full overflow-auto" />
+  return <div ref={containerRef} dir={writingDirection} className="h-full overflow-auto" />
 }

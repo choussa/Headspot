@@ -16,20 +16,20 @@
  * All text pairs below are verified against every surface in their theme.
  */
 :root {
-  --app-bg: #19181f;
-  --topbar-bg: #24222c;
-  --panel-bg: #211f28;
-  --panel-raised: #2b2934;
-  --editor-bg: #17161d;
-  --preview-bg: #393744;
+  --app-bg: #1b1a20;
+  --topbar-bg: #25232d;
+  --panel-bg: #201f26;
+  --panel-raised: #2a2832;
+  --editor-bg: #19181e;
+  --preview-bg: #3b3a46;
   --paper: #ffffff;
 
   --text-primary: #f1eff5;
   --text-secondary: #aaa7b4;
   --text-muted: #a6a2b1;
 
-  --border: #3a3744;
-  --border-strong: #4d4a58;
+  --border: #37343f;
+  --border-strong: #4b4855;
   --control-line: #7d798a;
 
   --accent-text: #6cb0f5;

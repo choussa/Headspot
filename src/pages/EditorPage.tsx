@@ -1,9 +1,8 @@
-import { supabase } from '../lib/supabase'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Project } from '../compiler/project'
+import { downloadBlob, svgToPngBlob, zipEntries } from '../compiler/exporters'
 import { loadFonts } from '../storage/fontLoader'
-import { loadLocalFonts } from '../compiler/fontLoader'
 import { TypstEditor } from '../editor/TypstEditor'
 import { CollabManager, type CollabSession } from '../editor/collab'
 import { VirtualizedPreview } from '../preview/VirtualizedPreview'
@@ -19,21 +18,31 @@ import {
 } from '../state/workspace'
 import type { Diagnostic, PageInfo, PreviewNavigator } from '@vedivad/typst-web-service'
 import type { EditorView } from '@codemirror/view'
-import { undo, redo } from '@codemirror/commands'
-import { openSearchPanel } from '@codemirror/search'
+import { undo, redo, selectAll } from '@codemirror/commands'
+import { openSearchPanel, closeSearchPanel, searchPanelOpen } from '@codemirror/search'
 import blank from '../templates/blank.typ?raw'
 import { usePreferences } from '../state/preferences'
+import { supabase } from '../lib/supabase'
 import { Menu, type MenuItem } from '../components/Menu'
 import { SettingsPanel } from '../components/SettingsPanel'
 import { ExportPanel } from '../components/ExportPanel'
 import { ConfirmDialog, PromptDialog } from '../components/Dialogs'
 import {
-  PanelLeft, Search, PenLine, Settings, Share2, Download, Undo2, Redo2, Loader2,
-  LogOut, RotateCw, Minus, Plus, Maximize2, ChevronDown, List, ListOrdered, Sigma, Code, AtSign,
-  TriangleAlert, Check,
+  ArrowLeft, Search, Settings, Download, Undo2, Redo2, Loader2,
+  RotateCw, Minus, Plus, Maximize2, ChevronDown, List, ListOrdered, Sigma, Code, AtSign,
+  TriangleAlert,
+  Globe, BookOpen, Package, Leaf, CircleHelp, Cloud, Terminal, Layout, Book
 } from 'lucide-react'
 
 const project = new Project()
+
+type ExportFormat = 'pdf' | 'zip' | 'svg' | 'png'
+
+/** Filesystem-safe download name derived from the project title. */
+function baseName(name: string | null | undefined): string {
+  const slug = (name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return slug || 'document'
+}
 
 export function EditorPage() {
   const { id } = useParams<{id: string}>()
@@ -43,14 +52,25 @@ export function EditorPage() {
   const [pages, setPages] = useState<PageInfo[]>([])
   const [compileSeq, setCompileSeq] = useState(0)
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
-  const [exporting, setExporting] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null)
+  const exporting = exportingFormat !== null
   const [zoom, setZoom] = useState(75)
   const [ready, setReady] = useState(false)
   const [compiling, setCompiling] = useState(false)
-  const [activePanel, setActivePanel] = useState<'files' | 'settings' | null>('files')
+  const [activePanel, setActivePanel] = useState<string | null>('files')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const [fileMenuOpen, setFileMenuOpen] = useState(false)
+  const [editMenuOpen, setEditMenuOpen] = useState(false)
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false)
+  const [newFileOpen, setNewFileOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [email, setEmail] = useState<string | null>(null)
   const [exportPanelOpen, setExportPanelOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null))
+  }, [])
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pendingDeleteFile, setPendingDeleteFile] = useState<string | null>(null)
@@ -139,11 +159,6 @@ export function EditorPage() {
     })
   }, [activeFilePath, runCompile, persist])
 
-  const onLoadLocalFonts = useCallback(async () => {
-    const fonts = await loadLocalFonts()
-    await project.addFonts(fonts)
-  }, [])
-
   const onNewFile = useCallback((path: string) => {
     const p = normalizePath(/\.[a-z0-9]+$/i.test(path.trim()) ? path.trim() : path.trim() + '.typ')
     if (!record) return
@@ -181,20 +196,75 @@ export function EditorPage() {
   }, [record, runCompile])
 
   const onExportPdf = useCallback(async () => {
-    setExporting(true)
+    if (!record) return
+    setExportingFormat('pdf')
     try {
       const pdf = await project.exportPdf()
-      const blob = new Blob([pdf.buffer as ArrayBuffer], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'report.pdf'
-      a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(new Blob([pdf.buffer as ArrayBuffer], { type: 'application/pdf' }), `${baseName(record.meta.name)}.pdf`)
     } finally {
-      setExporting(false)
+      setExportingFormat(null)
     }
-  }, [])
+  }, [project, record])
+
+  const onExportSources = useCallback(async () => {
+    if (!record) return
+    setExportingFormat('zip')
+    try {
+      const entries = record.files.map((f) => ({
+        // Zip paths must be relative; ProjectFile paths are absolute.
+        path: f.path.replace(/^\/+/, '') || 'main.typ',
+        data: f.kind === 'source' ? (f.text ?? '') : (f.data ?? new Uint8Array()),
+      }))
+      downloadBlob(await zipEntries(entries), `${baseName(record.meta.name)}-sources.zip`)
+    } finally {
+      setExportingFormat(null)
+    }
+  }, [record])
+
+  const onExportSvg = useCallback(async () => {
+    if (pages.length === 0) return
+    setExportingFormat('svg')
+    try {
+      const rendered = await project.renderedPages(0, pages.length)
+      if (rendered.length === 1) {
+        downloadBlob(
+          new Blob([rendered[0].svg], { type: 'image/svg+xml' }),
+          `${baseName(record?.meta.name ?? 'document')}.svg`,
+        )
+        return
+      }
+      const entries = rendered.map((p) => ({
+        path: `page-${p.index + 1}.svg`,
+        data: p.svg,
+      }))
+      downloadBlob(await zipEntries(entries), `${baseName(record?.meta.name ?? 'document')}-svg.zip`)
+    } finally {
+      setExportingFormat(null)
+    }
+  }, [pages.length, record])
+
+  const onExportPng = useCallback(async () => {
+    if (pages.length === 0) return
+    setExportingFormat('png')
+    try {
+      const rendered = await project.renderedPages(0, pages.length)
+      const entries = await Promise.all(
+        rendered.map(async (p) => ({
+          path: `page-${p.index + 1}.png`,
+          data: new Uint8Array(
+            await (await svgToPngBlob(p.svg, p.width, p.height)).arrayBuffer(),
+          ),
+        })),
+      )
+      if (entries.length === 1) {
+        downloadBlob(new Blob([entries[0].data], { type: 'image/png' }), `${baseName(record?.meta.name ?? 'document')}.png`)
+        return
+      }
+      downloadBlob(await zipEntries(entries), `${baseName(record?.meta.name ?? 'document')}-png.zip`)
+    } finally {
+      setExportingFormat(null)
+    }
+  }, [pages.length, record])
 
   const onShareLink = useCallback(async () => {
     const url = window.location.href
@@ -211,7 +281,6 @@ export function EditorPage() {
   const viewItems: MenuItem[] = [
     { label: 'File panel', checked: activePanel === 'files', onSelect: () => setActivePanel(activePanel === 'files' ? null : 'files') },
     { label: 'Settings panel', checked: activePanel === 'settings', onSelect: () => setActivePanel(activePanel === 'settings' ? null : 'settings') },
-    { label: 'Improve panel', checked: false, shortcut: 'Ctrl-Alt-3' },
     { label: 'Show toolbar', checked: prefs.showToolbar, onSelect: () => update('showToolbar', !prefs.showToolbar) },
     { label: 'Scroll on type', checked: prefs.scrollOnType, onSelect: () => update('scrollOnType', !prefs.scrollOnType) },
     { label: 'Wrap lines', checked: prefs.wrapLines, onSelect: () => update('wrapLines', !prefs.wrapLines) },
@@ -231,6 +300,38 @@ export function EditorPage() {
     { label: 'Present', pro: true, disabled: true },
     { label: 'Speaker mode', pro: true, disabled: true },
   ]
+
+  const fileItems: MenuItem[] = [
+    { label: 'New file…', shortcut: 'Ctrl-N', onSelect: () => setNewFileOpen(true) },
+    { label: 'Rename project…', onSelect: () => setRenameOpen(true) },
+    { label: 'Export PDF', onSelect: () => void onExportPdf() },
+    { label: 'Export sources (ZIP)', onSelect: () => void onExportSources() },
+    { label: 'Export SVG', onSelect: () => void onExportSvg() },
+    { label: 'Export PNG', onSelect: () => void onExportPng() },
+    { label: 'Delete project…', onSelect: () => setConfirmDelete(true) },
+    { label: 'Close', onSelect: () => navigate('/') },
+  ]
+
+  const editItems: MenuItem[] = [
+    { label: 'Undo', shortcut: 'Ctrl-Z', onSelect: () => { const v = editorViewRef.current; if (v) undo(v) } },
+    { label: 'Redo', shortcut: 'Ctrl-Y', onSelect: () => { const v = editorViewRef.current; if (v) redo(v) } },
+    { label: 'Select all', shortcut: 'Ctrl-A', onSelect: () => { const v = editorViewRef.current; if (v) selectAll(v) } },
+    { label: 'Find', shortcut: 'Ctrl-F', onSelect: () => { const v = editorViewRef.current; if (v) openSearchPanel(v) } },
+  ]
+
+  const helpItems: MenuItem[] = [
+    { label: 'Typst documentation', onSelect: () => window.open('https://typst.app/docs/', '_blank', 'noopener,noreferrer') },
+    { label: 'Compiler problems', checked: showDiagnostics, onSelect: () => setShowDiagnostics((v) => !v) },
+    { label: 'Settings', onSelect: () => setActivePanel(activePanel === 'settings' ? null : 'settings') },
+  ]
+
+  const onRenameProject = useCallback(async (name: string) => {
+    const trimmed = name.trim()
+    if (!record || !trimmed) return
+    const next = { ...record, meta: { ...record.meta, name: trimmed, updatedAt: Date.now() } }
+    setRecord(next)
+    persist(next)
+  }, [record, persist])
 
   const activeFile = record ? fileByPath(record.files, activeFilePath) : undefined
 
@@ -359,91 +460,133 @@ export function EditorPage() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <Link to="/" className="brand-mark no-underline hover:text-fg" style={{ textDecoration: 'none' }}>typst</Link>
-        <nav className="topnav" aria-label="Application menu">
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setViewMenuOpen((v) => !v)}
-              aria-expanded={viewMenuOpen}
-              aria-haspopup="menu"
-            >
-              View
-            </button>
-            {viewMenuOpen && <Menu items={viewItems} close={() => setViewMenuOpen(false)} />}
+      <header className="topbar px-4 py-2 border-b border-line bg-topbar flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button className="text-fg-2 hover:text-fg" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate('/')}>
+            <ArrowLeft size={16} />
+          </button>
+          <div className="flex items-center gap-3 text-[13px] font-medium text-fg">
+            <Link to="/" className="hover:text-white mr-1" style={{ textDecoration: 'none' }}>Typst</Link>
+            <div style={{ position: 'relative' }}>
+              <button className="hover:text-white" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen((v) => !v)}>File</button>
+              {fileMenuOpen && <Menu items={fileItems} close={() => setFileMenuOpen(false)} />}
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button className="hover:text-white" aria-haspopup="menu" aria-expanded={editMenuOpen} onClick={() => setEditMenuOpen((v) => !v)}>Edit</button>
+              {editMenuOpen && <Menu items={editItems} close={() => setEditMenuOpen(false)} />}
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button className="hover:text-white" aria-haspopup="menu" aria-expanded={viewMenuOpen} onClick={() => setViewMenuOpen((v) => !v)}>View</button>
+              {viewMenuOpen && <Menu items={viewItems} close={() => setViewMenuOpen(false)} />}
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button className="hover:text-white" aria-haspopup="menu" aria-expanded={helpMenuOpen} onClick={() => setHelpMenuOpen((v) => !v)}>Help</button>
+              {helpMenuOpen && <Menu items={helpItems} close={() => setHelpMenuOpen(false)} />}
+            </div>
           </div>
-        </nav>
-        <div className="top-actions">
+        </div>
+        
+        <div className="flex items-center text-[13px] font-medium text-fg-2">
+          <Cloud size={14} className="mr-2" />
+          <button onClick={() => setActivePanel('settings')} title="Account — open settings" className="hover:text-fg">
+            {email ?? 'Account'}
+          </button>
+          <span className="mx-1.5 text-line-2">›</span>
+          <button onClick={() => setRenameOpen(true)} title="Rename project" className="hover:text-fg">
+            {record?.meta.name ?? 'Untitled'}
+          </button>
+          <span className="mx-1.5 text-line-2">›</span>
+          <span className="text-white font-semibold">{activeFilePath.replace(/^\//, '')}</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-fg-2">
+          <button aria-label="Undo" title="Undo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) undo(v) }}><Undo2 size={15} /></button>
+          <button aria-label="Redo" title="Redo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) redo(v) }}><Redo2 size={15} /></button>
+          <div className="w-px h-4 bg-line mx-1" />
           <button
-            className="icon-button"
-            title="Sign out"
-            aria-label="Sign out"
-            onClick={() => supabase.auth.signOut()}
+            aria-label="Compiler problems"
+            title="Compiler problems"
+            className={`p-1 hover:bg-raised rounded ${showDiagnostics ? 'text-white' : 'text-fg'}`}
+            onClick={() => setShowDiagnostics((v) => !v)}
           >
-            <LogOut size={15} />
+            <Terminal size={15} />
+            {diagnostics.length > 0 && (
+              <span
+                aria-label={`${diagnostics.length} problems`}
+                className="ml-1 rounded-full px-1 text-[10px] text-white"
+                style={{ background: 'var(--danger-fill)' }}
+              >
+                {diagnostics.length}
+              </span>
+            )}
+          </button>
+          <div className="w-px h-4 bg-line mx-1" />
+          <button aria-label="Zoom out" title="Zoom out" className="p-1 hover:bg-raised rounded text-fg" onClick={() => setZoom(z => Math.max(25, z - 10))}><Minus size={15} /></button>
+          <span className="text-xs w-10 text-center font-medium">{zoom}%</span>
+          <button aria-label="Zoom in" title="Zoom in" className="p-1 hover:bg-raised rounded text-fg" onClick={() => setZoom(z => Math.min(500, z + 10))}><Plus size={15} /></button>
+          <div className="w-px h-4 bg-line mx-1" />
+          <button
+            aria-label="Toggle preview"
+            title="Show/hide preview panel"
+            className={`p-1 hover:bg-raised rounded ${prefs.showBothPanels ? 'text-fg' : 'text-fg-2'}`}
+            onClick={() => update('showBothPanels', !prefs.showBothPanels)}
+          >
+            <Layout size={15} />
           </button>
           <button
-            className="icon-button"
-            title="Undo"
-            aria-label="Undo"
-            onClick={() => { const v = editorViewRef.current; if (v) undo(v) }}
+            aria-label="Toggle file tree"
+            title="Show/hide files panel"
+            className={`p-1 hover:bg-raised rounded ${activePanel === 'files' ? 'text-fg' : 'text-fg-2'}`}
+            onClick={() => setActivePanel(activePanel === 'files' ? null : 'files')}
           >
-            <Undo2 size={15} />
+            <Book size={15} />
+          </button>
+          <div className="w-px h-4 bg-line mx-2" />
+          <button
+            onClick={onShareLink}
+            className="flex items-center h-[26px] px-3 text-[13px] font-medium rounded border border-line bg-panel hover:bg-raised text-fg transition-colors"
+          >
+            {copied ? 'Copied' : 'Share'}
           </button>
           <button
-            className="icon-button"
-            title="Redo"
-            aria-label="Redo"
-            onClick={() => { const v = editorViewRef.current; if (v) redo(v) }}
+            onClick={() => setExportPanelOpen((v) => !v)}
+            aria-expanded={exportPanelOpen}
+            aria-controls="export-panel"
+            title="Export"
+            className="flex items-center h-[26px] px-2 text-[13px] font-medium rounded border border-line bg-panel hover:bg-raised text-fg transition-colors gap-1"
           >
-            <Redo2 size={15} />
-          </button>
-          <button className="share-button" onClick={onShareLink}>
-            {copied ? <Check size={13} /> : <Share2 size={13} />}
-            {copied ? 'Link copied' : 'Share'}
+            <Download size={14} />
+            <div className="w-px h-3 bg-line-2 mx-1"></div>
+            <ChevronDown size={12} />
           </button>
         </div>
       </header>
       <div className="workbench">
-        <aside className="activity-rail" aria-label="Workspace navigation">
-          <button
-            className={`rail-button${activePanel === 'files' ? ' rail-active' : ''}`}
-            title="Files"
-            aria-label="Toggle file panel"
-            aria-pressed={activePanel === 'files'}
-            onClick={() => setActivePanel(activePanel === 'files' ? null : 'files')}
-          >
-            <PanelLeft size={18} />
-          </button>
-          <button
-            className="rail-button"
-            title="Search"
-            aria-label="Search in document"
-            onClick={() => { const v = editorViewRef.current; if (v) openSearchPanel(v) }}
-          >
+        <aside className="activity-rail flex flex-col w-[48px] border-r border-line bg-topbar py-3 items-center gap-3 shrink-0">
+          <button aria-label="Search" title="Search" className={`p-2 rounded text-fg-2 hover:text-fg ${searchOpen ? 'text-white' : ''}`} onClick={() => { const v = editorViewRef.current; if (v) { if (searchPanelOpen(v.state)) { closeSearchPanel(v); setSearchOpen(false) } else { openSearchPanel(v); setSearchOpen(true) } } }}>
             <Search size={18} />
           </button>
-          <button
-            className={`rail-button${showDiagnostics ? ' rail-active' : ''}`}
-            title={diagnostics.length ? `${diagnostics.length} problem${diagnostics.length === 1 ? '' : 's'}` : 'No problems'}
-            aria-label={diagnostics.length ? `Problems: ${diagnostics.length}` : 'No problems'}
-            aria-pressed={showDiagnostics}
-            onClick={() => setShowDiagnostics((v) => !v)}
-          >
-            <PenLine size={18} />
-            {diagnostics.length > 0 && (
-              <span className="notification notification-error tnum">{diagnostics.length}</span>
-            )}
+          <button aria-label="Outline" title="Outline" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'outline' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'outline' ? null : 'outline')}>
+            <BookOpen size={18} />
           </button>
-          <div className="rail-spacer" />
-          <button
-            className={`rail-button${activePanel === 'settings' ? ' rail-active' : ''}`}
-            title="Settings"
-            aria-label="Toggle settings panel"
-            aria-pressed={activePanel === 'settings'}
-            onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}
-          >
+          <button aria-label="Packages" title="Packages" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'packages' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'packages' ? null : 'packages')}>
+            <Package size={18} />
+          </button>
+          <button aria-label="Collaboration" title="Collaboration" className={`relative p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'globe' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'globe' ? null : 'globe')}>
+            <Globe size={18} />
+            <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-brand-fill rounded-full border-[1.5px] border-topbar flex items-center justify-center text-[9px] text-white font-bold">5</span>
+          </button>
+          <button aria-label="Toggle settings panel" title="Settings" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'settings' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}>
             <Settings size={18} />
+          </button>
+          
+          <div className="flex-1" />
+          
+          <button className="p-2 rounded text-fg-2 hover:text-fg">
+            <Leaf size={18} />
+          </button>
+          <button className="p-2 rounded text-fg-2 hover:text-fg">
+            <CircleHelp size={18} />
           </button>
           <div className="rail-wordmark" aria-hidden="true">typst</div>
         </aside>
@@ -546,7 +689,14 @@ export function EditorPage() {
         </div>
         )}
         {activePanel === 'settings' && (
-          <SettingsPanel prefs={prefs} update={update} onRequestDelete={() => setConfirmDelete(true)} onLoadLocalFonts={onLoadLocalFonts} />
+          <SettingsPanel
+            prefs={prefs}
+            update={update}
+            onRequestDelete={() => setConfirmDelete(true)}
+            record={record}
+            onRename={onRenameProject}
+            onMoveFolder={onMoveFolder}
+          />
         )}
         <SplitPane
           vertical={prefs.splitVertical}
@@ -563,6 +713,8 @@ export function EditorPage() {
                 fontSize={prefs.fontSize}
                 fontFamily={prefs.fontFamily}
                 dark={prefs.theme === 'dark' || (prefs.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
+                vimMode={prefs.vimMode}
+                writingDirection={prefs.writingDirection}
                 externalViewRef={editorViewRef}
                 onCursor={onEditorCursor}
                 collab={collabSession}
@@ -571,7 +723,7 @@ export function EditorPage() {
               <div className="p-4 text-sm text-fg-2">Select a .typ file to edit, or upload an asset.</div>
             )
           }
-          right={prefs.showBothPanels ? <ErrorBoundary><div className={prefs.invertPreview ? 'invert-preview h-full' : 'h-full'}><div className="flex h-full"><div className="min-w-0 flex-1"><VirtualizedPreview pages={pages} compileSeq={compileSeq} renderPage={(i) => project.renderPage(i)} zoom={zoom} onZoomChange={setZoom} engine={project.getEngine()} navRef={navRef} onSourceJump={onSourceJump} /></div>{exportPanelOpen && <ExportPanel onExportPdf={onExportPdf} exporting={exporting} pageCount={pages.length} />}</div></div></ErrorBoundary> : null}
+          right={prefs.showBothPanels ? <ErrorBoundary><div className={prefs.invertPreview ? 'invert-preview h-full' : 'h-full'}><div className="flex h-full"><div className="min-w-0 flex-1"><VirtualizedPreview pages={pages} compileSeq={compileSeq} renderPage={(i) => project.renderPage(i)} zoom={zoom} onZoomChange={setZoom} engine={project.getEngine()} navRef={navRef} onSourceJump={onSourceJump} /></div>{exportPanelOpen && <ExportPanel onExportPdf={onExportPdf} onExportSources={onExportSources} onExportSvg={onExportSvg} onExportPng={onExportPng} exportingFormat={exportingFormat} pageCount={pages.length} fileCount={record?.files.length ?? 0} />}</div></div></ErrorBoundary> : null}
         />
       </div>
         </main>
@@ -609,6 +761,24 @@ export function EditorPage() {
           setPendingDeleteFile(null)
           if (path) onDeleteFile(path)
         }}
+      />
+      <PromptDialog
+        open={newFileOpen}
+        title="New file"
+        description="Enter the path for the new file, e.g. /chapters/intro.typ."
+        placeholder="/chapters/intro.typ"
+        confirmLabel="Create"
+        onCancel={() => setNewFileOpen(false)}
+        onConfirm={(value) => { setNewFileOpen(false); if (value.trim()) onNewFile(value) }}
+      />
+      <PromptDialog
+        open={renameOpen}
+        title="Rename project"
+        description="Update this project's display name."
+        initialValue={record?.meta.name ?? ''}
+        confirmLabel="Rename"
+        onCancel={() => setRenameOpen(false)}
+        onConfirm={(value) => { setRenameOpen(false); void onRenameProject(value) }}
       />
     </div>
   )

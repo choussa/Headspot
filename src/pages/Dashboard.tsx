@@ -342,16 +342,22 @@ export function Dashboard() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-app font-sans text-fg">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-line bg-topbar px-5">
-        <span className="text-lg font-bold tracking-tight text-fg">typst</span>
-        <div className="flex items-center gap-3 text-sm text-fg-2">
+      <header className="flex h-[36px] shrink-0 items-center justify-between border-b border-line bg-topbar px-4 text-[13px]">
+        <Link to="/" className="font-bold text-fg">
+          <span className="sr-only">Headspot home</span>
+          <span aria-hidden="true">typst</span>
+        </Link>
+        <div className="flex items-center gap-3 font-medium text-fg-2">
           <span className="hidden items-center gap-2 sm:flex">
             <span className="cloud-dot" aria-hidden="true" />
             <Cloud size={14} />
             Synced
           </span>
           {ThemeControl}
-          <button onClick={() => supabase.auth.signOut()} className="rounded px-1 py-1 transition-colors hover:text-fg">
+          <button
+            onClick={() => void supabase.auth.signOut()}
+            className="rounded px-1 py-1 text-fg-2 transition-colors hover:text-fg"
+          >
             Sign out
           </button>
         </div>

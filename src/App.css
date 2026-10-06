@@ -1,8 +1,10 @@
 /* Editor workbench. Color comes only from the tokens in index.css. */
 .app-shell { height: 100vh; min-height: 560px; overflow: hidden; background: var(--app-bg); color: var(--text-primary); }
-.topbar { height: 42px; display: flex; align-items: center; gap: 20px; padding: 0 18px; background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+.topbar { height: 42px; display: flex; align-items: center; gap: 14px; padding: 0 18px; background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+.back-button { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 24px; margin-right: -5px; border: 0; background: transparent; color: var(--text-secondary); }
+.back-button:hover { color: var(--text-primary); }
 .brand-mark { font-size: 17px; font-weight: 800; letter-spacing: -.04em; color: var(--text-primary); }
-.topnav { display: flex; gap: 17px; }
+.topnav { display: flex; gap: 2px; }
 .topnav button, .formatting-tools button, .icon-button, .zoom-button { border: 0; color: inherit; background: transparent; }
 .topnav button:hover, .formatting-tools button:hover, .icon-button:hover { color: var(--text-primary); }
 .document-crumb { display: flex; align-items: center; gap: 8px; margin: 0 auto; color: var(--text-muted); }
@@ -12,12 +14,14 @@
 .icon-button { min-width: 26px; height: 26px; border-radius: 5px; font-size: 15px; }
 .share-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid var(--control-line); border-radius: 5px; background: var(--panel-raised); color: var(--text-primary); font-size: 12px; }
 .workbench { height: calc(100vh - 42px); min-height: 0; display: flex; }
-.activity-rail { width: 58px; display: flex; flex-direction: column; align-items: center; padding: 8px 0; background: var(--topbar-bg); border-right: 1px solid var(--border); }
+.activity-rail { width: 58px; display: flex; flex-direction: column; align-items: center; padding: 8px 0 10px; background: var(--topbar-bg); border-right: 1px solid var(--border); }
 .rail-button { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin-bottom: 4px; border: 0; border-left: 2px solid transparent; background: transparent; color: var(--text-secondary); font-size: 21px; }
 .rail-button:hover, .rail-active { color: var(--text-primary); background: var(--rail-active); border-left-color: var(--accent-orange); }
 .notification { position: absolute; top: 3px; right: 4px; min-width: 15px; height: 15px; padding: 1px 3px; border-radius: 8px; color: #fff; background: var(--accent-orange-fill); font-size: 9px; pointer-events: none; }
 .rail-spacer { flex: 1; }
 .rail-wordmark { writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 15px; color: var(--text-primary); font-size: 20px; font-weight: 800; letter-spacing: -.06em; }
+.dashboard-rail { gap: 8px; }
+.dashboard-rail .rail-wordmark { margin-top: 12px; }
 .workspace-main { min-width: 0; flex: 1; display: flex; flex-direction: column; position: relative; }
 .workspace-toolbar { min-height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
 .formatting-tools, .preview-tools { display: flex; align-items: center; gap: 4px; }
@@ -41,7 +45,7 @@
 .editor-workspace .cm-gutters { background: var(--editor-bg); color: var(--text-muted); border-color: var(--border); }
 .editor-workspace .cm-activeLineGutter { color: var(--text-secondary); background: var(--panel-raised); }
 .preview-scroll { overscroll-behavior: contain; touch-action: pan-x pan-y; }
-.preview-page-layer { min-height: 100%; }
+.preview-page-layer { min-height: 100%; display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 8px 0; }
 /* Depth needs an offset and a blur; a zero-offset halo reads as decoration. */
 .preview-page { box-shadow: 0 10px 28px -12px rgba(0, 0, 0, .5); }
 @media (max-width: 760px) {
@@ -76,7 +80,7 @@
 .topnav > div { display: flex; align-items: center; }
 
 /* Settings panel */
-.settings-panel { width: 260px; padding: 16px; background: var(--panel-bg); border-right: 1px solid var(--border); overflow-y: auto; color: var(--text-primary); font-size: 12px; }
+.settings-panel { width: 286px; padding: 18px 14px 18px 12px; background: var(--panel-bg); border-right: 1px solid var(--border); overflow-y: auto; color: var(--text-primary); font-size: 12px; }
 .settings-panel h2 { margin: 0 0 12px; font-size: 14px; }
 .settings-panel section { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
 .settings-panel input[type="text"], .settings-panel input[type="number"], .settings-panel select { background: var(--panel-raised); border: 1px solid var(--control-line); color: var(--text-primary); border-radius: 4px; padding: 5px 8px; }
