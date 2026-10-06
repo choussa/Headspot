@@ -10,7 +10,7 @@ import { SplitPane } from '../components/SplitPane'
 import { FileTree } from '../components/FileTree'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import {
-  listProjects, loadProject, saveProject, deleteProject,
+  listProjects, loadProject, saveProject, deleteProject, moveProject,
 } from '../storage/cloudStore'
 import {
   createProject, addFile, deleteFile, setFileText, addAsset, fileByPath,
@@ -25,13 +25,14 @@ import { usePreferences } from '../state/preferences'
 import { supabase } from '../lib/supabase'
 import { Menu, type MenuItem } from '../components/Menu'
 import { SettingsPanel } from '../components/SettingsPanel'
+import { OutlinePanel } from '../components/OutlinePanel'
 import { ExportPanel } from '../components/ExportPanel'
 import { ConfirmDialog, PromptDialog } from '../components/Dialogs'
 import {
   ArrowLeft, Search, Settings, Download, Undo2, Redo2, Loader2,
   RotateCw, Minus, Plus, Maximize2, ChevronDown, List, ListOrdered, Sigma, Code, AtSign,
   TriangleAlert,
-  Globe, BookOpen, Package, Leaf, CircleHelp, Cloud, Terminal, Layout, Book
+  BookOpen, Package, CircleHelp, Cloud, Terminal, Layout, Book, Files
 } from 'lucide-react'
 
 const project = new Project()
@@ -333,6 +334,19 @@ export function EditorPage() {
     persist(next)
   }, [record, persist])
 
+  const onMoveFolder = useCallback(async (folderId: string | null) => {
+    if (!record) return
+    await moveProject(record.meta.id, folderId)
+    const next = { ...record, meta: { ...record.meta, folderId } }
+    setRecord(next)
+    persist(next)
+  }, [record, persist])
+
+  useEffect(() => {
+    if (!ready) return
+    project.setEntry(prefs.previewedFile || '/main.typ')
+  }, [prefs.previewedFile, ready])
+
   const activeFile = record ? fileByPath(record.files, activeFilePath) : undefined
 
   const editorViewRef = useRef<EditorView | null>(null)
@@ -563,7 +577,10 @@ export function EditorPage() {
       </header>
       <div className="workbench">
         <aside className="activity-rail flex flex-col w-[48px] border-r border-line bg-topbar py-3 items-center gap-3 shrink-0">
-          <button aria-label="Search" title="Search" className={`p-2 rounded text-fg-2 hover:text-fg ${searchOpen ? 'text-white' : ''}`} onClick={() => { const v = editorViewRef.current; if (v) { if (searchPanelOpen(v.state)) { closeSearchPanel(v); setSearchOpen(false) } else { openSearchPanel(v); setSearchOpen(true) } } }}>
+          <button aria-label="Files" title="Files" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'files' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'files' ? null : 'files')}>
+            <Files size={18} />
+          </button>
+          <button aria-label="Search" title="Search" className={`p-2 rounded text-fg-2 hover:text-fg ${searchOpen ? 'rail-active' : ''}`} onClick={() => { const v = editorViewRef.current; if (v) { if (searchPanelOpen(v.state)) { closeSearchPanel(v); setSearchOpen(false) } else { openSearchPanel(v); setSearchOpen(true) } } }}>
             <Search size={18} />
           </button>
           <button aria-label="Outline" title="Outline" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'outline' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'outline' ? null : 'outline')}>
@@ -572,23 +589,15 @@ export function EditorPage() {
           <button aria-label="Packages" title="Packages" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'packages' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'packages' ? null : 'packages')}>
             <Package size={18} />
           </button>
-          <button aria-label="Collaboration" title="Collaboration" className={`relative p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'globe' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'globe' ? null : 'globe')}>
-            <Globe size={18} />
-            <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-brand-fill rounded-full border-[1.5px] border-topbar flex items-center justify-center text-[9px] text-white font-bold">5</span>
+
+          <div className="flex-1" />
+
+          <button aria-label="Help" title="Typst documentation" className="p-2 rounded text-fg-2 hover:text-fg" onClick={() => window.open('https://typst.app/docs/', '_blank', 'noopener,noreferrer')}>
+            <CircleHelp size={18} />
           </button>
           <button aria-label="Toggle settings panel" title="Settings" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'settings' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}>
             <Settings size={18} />
           </button>
-          
-          <div className="flex-1" />
-          
-          <button className="p-2 rounded text-fg-2 hover:text-fg">
-            <Leaf size={18} />
-          </button>
-          <button className="p-2 rounded text-fg-2 hover:text-fg">
-            <CircleHelp size={18} />
-          </button>
-          <div className="rail-wordmark" aria-hidden="true">typst</div>
         </aside>
         <main className="workspace-main">
           {!ready && (
@@ -688,6 +697,9 @@ export function EditorPage() {
           )}
         </div>
         )}
+        {activePanel === 'outline' && activeFile && activeFile.kind === 'source' && (
+          <OutlinePanel source={activeFile.text ?? ''} onJump={(line) => onSourceJump(activeFilePath, line, 1)} />
+        )}
         {activePanel === 'settings' && (
           <SettingsPanel
             prefs={prefs}
@@ -715,6 +727,7 @@ export function EditorPage() {
                 dark={prefs.theme === 'dark' || (prefs.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
                 vimMode={prefs.vimMode}
                 writingDirection={prefs.writingDirection}
+                spellcheck={prefs.spellcheck}
                 externalViewRef={editorViewRef}
                 onCursor={onEditorCursor}
                 collab={collabSession}
