@@ -63,6 +63,19 @@ function Node({ node, activePath, depth, onOpenFile, onRequestDeleteFile }: {
 export function FileTree({ files, activePath, onOpenFile, onNewFile, onRequestDeleteFile, onUploadAsset }: Props) {
   const tree = buildTree(files)
   const [newPath, setNewPath] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    for (const f of Array.from(e.dataTransfer.files)) {
+      const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)
+      if (!isImage) continue
+      const buf = new Uint8Array(await f.arrayBuffer())
+      onUploadAsset(`/assets/${f.name}`, buf)
+    }
+  }
 
   const onFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -75,7 +88,12 @@ export function FileTree({ files, activePath, onOpenFile, onNewFile, onRequestDe
   return (
     <div className="h-full flex flex-col text-sm" style={{background:'var(--panel-bg)',color:'var(--text-primary)'}}>
       <div className="file-panel-header">Files</div>
-      <div className="flex-1 overflow-auto p-2">
+      <div
+        className={`flex-1 overflow-auto p-2 ${dragOver ? 'file-drag-over' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true) }}
+        onDragLeave={(e) => { e.preventDefault(); setDragOver(false) }}
+        onDrop={handleDrop}
+      >
         {tree.map((n) => (
           <Node key={n.path} node={n} activePath={activePath} depth={0} onOpenFile={onOpenFile} onRequestDeleteFile={onRequestDeleteFile} />
         ))}

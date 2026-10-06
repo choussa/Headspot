@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import type { ProjectMeta, ProjectRecord, ProjectFile } from '../state/workspace'
 import { MAIN_PATH } from '../state/workspace'
+import { queueRecord } from './offlineQueue'
 
 export interface FolderMeta { id: string; name: string }
 
@@ -68,6 +69,18 @@ export async function loadProject(id: string): Promise<ProjectRecord | undefined
 }
 
 export async function saveProject(record: ProjectRecord): Promise<void> {
+  if (!navigator.onLine) {
+    await queueRecord(record)
+    return
+  }
+  try {
+    await saveProjectOnline(record)
+  } catch {
+    await queueRecord(record)
+  }
+}
+
+async function saveProjectOnline(record: ProjectRecord): Promise<void> {
   const { data: user } = await supabase.auth.getUser()
   if (!user.user) return
 

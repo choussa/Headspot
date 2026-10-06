@@ -3,6 +3,7 @@ import { AlignLeft, AlignRight } from 'lucide-react'
 import type { Preferences } from '../state/preferences'
 import type { ProjectRecord } from '../state/workspace'
 import { listFolders, type FolderMeta } from '../storage/cloudStore'
+import { loadGithubConfig, saveGithubConfig, pushToGitHub } from '../integrations/github'
 
 interface Props {
   prefs: Preferences
@@ -15,6 +16,9 @@ interface Props {
 
 export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename, onMoveFolder }: Props) {
   const [folders, setFolders] = useState<FolderMeta[]>([])
+  const [gh, setGh] = useState(loadGithubConfig)
+  const [ghBusy, setGhBusy] = useState(false)
+  const [ghStatus, setGhStatus] = useState<string | null>(null)
   useEffect(() => {
     void listFolders().then(setFolders)
   }, [])
@@ -188,7 +192,33 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
         
         <section>
           <h3 className="text-fg font-semibold mb-4 text-[14px]">Version control</h3>
-          <p className="text-fg-3">No remote repository connected. Connect GitHub from the dashboard to track project history.</p>
+          <div className="flex flex-col gap-3 text-xs">
+            <input className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="GitHub token" type="password" value={gh.token} onChange={(e) => setGh({ ...gh, token: e.target.value })} />
+            <input className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="owner/repo" value={gh.repo} onChange={(e) => setGh({ ...gh, repo: e.target.value })} />
+            <input className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="branch (main)" value={gh.branch} onChange={(e) => setGh({ ...gh, branch: e.target.value })} />
+            <button
+              type="button"
+              className="rounded border border-line px-3 py-1.5 text-fg-2 hover:text-fg disabled:opacity-50"
+              disabled={ghBusy || !record}
+              onClick={async () => {
+                if (!record) return
+                setGhBusy(true)
+                setGhStatus(null)
+                try {
+                  saveGithubConfig(gh)
+                  await pushToGitHub(gh, record.files.filter((f) => f.kind === 'source').map((f) => ({ path: f.path, text: f.text ?? '' })), `Update ${record.meta.name}`)
+                  setGhStatus('Pushed to GitHub')
+                } catch (e) {
+                  setGhStatus(e instanceof Error ? e.message : 'Push failed')
+                } finally {
+                  setGhBusy(false)
+                }
+              }}
+            >
+              {ghBusy ? 'Pushing…' : 'Push to GitHub'}
+            </button>
+            {ghStatus && <p className="text-fg-3">{ghStatus}</p>}
+          </div>
         </section>
 
         <div className="mt-2">

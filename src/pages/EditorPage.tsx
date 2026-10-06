@@ -26,6 +26,9 @@ import { supabase } from '../lib/supabase'
 import { Menu, type MenuItem } from '../components/Menu'
 import { SettingsPanel } from '../components/SettingsPanel'
 import { OutlinePanel } from '../components/OutlinePanel'
+import { HistoryPanel } from '../components/HistoryPanel'
+import { CopilotPanel } from '../components/CopilotPanel'
+import { takeSnapshot, type Snapshot } from '../storage/history'
 import { ExportPanel } from '../components/ExportPanel'
 import { ConfirmDialog, PromptDialog } from '../components/Dialogs'
 import {
@@ -73,6 +76,7 @@ export function EditorPage() {
     void supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null))
   }, [])
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pendingDeleteFile, setPendingDeleteFile] = useState<string | null>(null)
   const [showDiagnostics, setShowDiagnostics] = useState(false)
@@ -282,6 +286,8 @@ export function EditorPage() {
   const viewItems: MenuItem[] = [
     { label: 'File panel', checked: activePanel === 'files', onSelect: () => setActivePanel(activePanel === 'files' ? null : 'files') },
     { label: 'Settings panel', checked: activePanel === 'settings', onSelect: () => setActivePanel(activePanel === 'settings' ? null : 'settings') },
+    { label: 'Version history', checked: activePanel === 'history', onSelect: () => setActivePanel(activePanel === 'history' ? null : 'history') },
+    { label: 'Copilot assistant', checked: activePanel === 'copilot', onSelect: () => setActivePanel(activePanel === 'copilot' ? null : 'copilot') },
     { label: 'Show toolbar', checked: prefs.showToolbar, onSelect: () => update('showToolbar', !prefs.showToolbar) },
     { label: 'Scroll on type', checked: prefs.scrollOnType, onSelect: () => update('scrollOnType', !prefs.scrollOnType) },
     { label: 'Wrap lines', checked: prefs.wrapLines, onSelect: () => update('wrapLines', !prefs.wrapLines) },
@@ -309,6 +315,7 @@ export function EditorPage() {
     { label: 'Export sources (ZIP)', onSelect: () => void onExportSources() },
     { label: 'Export SVG', onSelect: () => void onExportSvg() },
     { label: 'Export PNG', onSelect: () => void onExportPng() },
+    { label: 'Publish to web', onSelect: () => void onPublish() },
     { label: 'Delete project…', onSelect: () => setConfirmDelete(true) },
     { label: 'Close', onSelect: () => navigate('/') },
   ]
@@ -347,9 +354,52 @@ export function EditorPage() {
     project.setEntry(prefs.previewedFile || '/main.typ')
   }, [prefs.previewedFile, ready])
 
+  const onRestoreSnapshot = useCallback((snap: Snapshot) => {
+    setRecord((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, files: snap.files }
+      persist(next)
+      return next
+    })
+    setActiveFilePath('/main.typ')
+    void runCompile(snap.files)
+  }, [persist, runCompile])
+
+  const onCopilotInsert = useCallback((code: string) => {
+    const v = editorViewRef.current
+    if (v) {
+      const { from, to } = v.state.selection.main
+      v.dispatch({ changes: { from, to, insert: code } })
+      v.focus()
+      return
+    }
+    const r = recordRef.current
+    if (r) {
+      const f = fileByPath(r.files, activeFilePath)
+      if (f && f.kind === 'source') updateFiles(setFileText(r.files, activeFilePath, (f.text ?? '') + '\n' + code))
+    }
+  }, [activeFilePath, updateFiles])
+
+  const onPublish = useCallback(async () => {
+    if (!record) return
+    const res = await project.compileProject(record.files)
+    if (!res || res.pages.length === 0) return
+    const svgs = await Promise.all(res.pages.map((_, i) => project.renderPage(i)))
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${record.meta.name}</title><style>body{margin:0;background:#444;display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px}svg{background:#fff;max-width:100%;height:auto;box-shadow:0 4px 24px rgba(0,0,0,.4)}</style></head><body>${svgs.filter(Boolean).join('\n')}</body></html>`
+    const { error } = await supabase.storage.from('project-assets').upload(`published/${record.meta.id}/index.html`, new Blob([html], { type: 'text/html' }), { upsert: true, contentType: 'text/html' })
+    if (error) {
+      console.error('Publish failed', error)
+      return
+    }
+    const { data } = supabase.storage.from('project-assets').getPublicUrl(`published/${record.meta.id}/index.html`)
+    setPublishedUrl(data.publicUrl)
+  }, [record])
+
   const activeFile = record ? fileByPath(record.files, activeFilePath) : undefined
 
   const editorViewRef = useRef<EditorView | null>(null)
+  const recordRef = useRef(record)
+  recordRef.current = record
   const navRef = useRef<PreviewNavigator | null>(null)
   const cursorTimer = useRef<number | undefined>(undefined)
   const collabMgrRef = useRef<CollabManager | null>(null)
@@ -436,6 +486,15 @@ export function EditorPage() {
 
 
   useEffect(() => {
+    if (!record) return
+    const id = window.setInterval(() => {
+      const r = recordRef.current
+      if (r) takeSnapshot(r.meta.id, r.files)
+    }, 10 * 60 * 1000)
+    return () => window.clearInterval(id)
+  }, [record?.meta.id])
+
+  useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
@@ -448,7 +507,12 @@ export function EditorPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 's' || e.key === 'S') {
-          if (prefs.disableCtrlS) e.preventDefault()
+          e.preventDefault()
+          const r = recordRef.current
+          if (r) {
+            takeSnapshot(r.meta.id, r.files)
+            persist(r)
+          }
           return
         }
         if (e.key === '=' || e.key === '+' || e.key === '-') {
@@ -700,6 +764,16 @@ export function EditorPage() {
         {activePanel === 'outline' && activeFile && activeFile.kind === 'source' && (
           <OutlinePanel source={activeFile.text ?? ''} onJump={(line) => onSourceJump(activeFilePath, line, 1)} />
         )}
+        {activePanel === 'history' && record && (
+          <HistoryPanel
+            projectId={record.meta.id}
+            currentMainText={fileByPath(record.files, '/main.typ')?.text ?? ''}
+            onRestore={onRestoreSnapshot}
+          />
+        )}
+        {activePanel === 'copilot' && (
+          <CopilotPanel onInsert={onCopilotInsert} />
+        )}
         {activePanel === 'settings' && (
           <SettingsPanel
             prefs={prefs}
@@ -751,6 +825,17 @@ export function EditorPage() {
         confirmLabel="Done"
         onCancel={() => setShareUrl(null)}
         onConfirm={() => setShareUrl(null)}
+      />
+
+      <PromptDialog
+        open={publishedUrl !== null}
+        title="Published"
+        description="Your document is published as a view-only HTML page."
+        initialValue={publishedUrl ?? ''}
+        readOnly
+        confirmLabel="Done"
+        onCancel={() => setPublishedUrl(null)}
+        onConfirm={() => setPublishedUrl(null)}
       />
 
       <ConfirmDialog
