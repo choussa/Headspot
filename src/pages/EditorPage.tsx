@@ -72,6 +72,7 @@ export function EditorPage() {
   const [email, setEmail] = useState<string | null>(null)
   const [exportPanelOpen, setExportPanelOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [assetQueue, setAssetQueue] = useState<{ name: string; data: Uint8Array }[]>([])
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null))
   }, [])
@@ -474,14 +475,24 @@ export function EditorPage() {
   const handleDocDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    for (const f of Array.from(e.dataTransfer.files)) {
+    const list = Array.from(e.dataTransfer.files)
+    const next: { name: string; data: Uint8Array }[] = []
+    for (const f of list) {
       const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)
       if (!isImage) continue
-      const buf = new Uint8Array(await f.arrayBuffer())
-      onUploadAsset(`/assets/${f.name}`, buf)
-      insertImage(f.name)
+      next.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })
     }
-  }, [onUploadAsset, insertImage])
+    if (next.length) setAssetQueue((q) => [...q, ...next])
+  }, [])
+
+  const confirmAsset = useCallback((value: string) => {
+    const item = assetQueue[0]
+    setAssetQueue((q) => q.slice(1))
+    if (!item) return
+    const safe = (value.trim() || item.name).replace(/[/\\]/g, '-')
+    onUploadAsset(`/assets/${safe}`, item.data)
+    insertImage(safe)
+  }, [assetQueue, onUploadAsset, insertImage])
 
   useEffect(() => {
     const prevent = (e: DragEvent) => e.preventDefault()
@@ -883,6 +894,18 @@ export function EditorPage() {
         confirmLabel="Done"
         onCancel={() => setPublishedUrl(null)}
         onConfirm={() => setPublishedUrl(null)}
+      />
+
+      <PromptDialog
+        key={assetQueue.length + ':' + (assetQueue[0]?.name ?? '')}
+        open={assetQueue.length > 0}
+        title="Name asset"
+        description="Set a filename for the dropped image before adding it to your project."
+        initialValue={assetQueue[0]?.name ?? ''}
+        confirmLabel="Add"
+        cancelLabel="Discard"
+        onCancel={() => setAssetQueue([])}
+        onConfirm={confirmAsset}
       />
 
       <ConfirmDialog

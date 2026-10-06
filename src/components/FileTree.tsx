@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FileText, Folder, FolderOpen, Image as ImageIcon, X } from 'lucide-react'
 import { buildTree, type TreeNode, type ProjectFile } from '../state/workspace'
+import { PromptDialog } from './Dialogs'
 
 interface Props {
   files: ProjectFile[]
@@ -64,24 +65,36 @@ export function FileTree({ files, activePath, onOpenFile, onNewFile, onRequestDe
   const tree = buildTree(files)
   const [newPath, setNewPath] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [pending, setPending] = useState<{ name: string; data: Uint8Array }[]>([])
+
+  const queueUploads = async (list: FileList | File[]) => {
+    const next: { name: string; data: Uint8Array }[] = []
+    for (const f of Array.from(list)) {
+      const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)
+      if (!isImage) continue
+      next.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })
+    }
+    if (next.length) setPending((q) => [...q, ...next])
+  }
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(false)
-    for (const f of Array.from(e.dataTransfer.files)) {
-      const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)
-      if (!isImage) continue
-      const buf = new Uint8Array(await f.arrayBuffer())
-      onUploadAsset(`/assets/${f.name}`, buf)
-    }
+    await queueUploads(e.dataTransfer.files)
+  }
+
+  const confirmAsset = (value: string) => {
+    const item = pending[0]
+    setPending((q) => q.slice(1))
+    if (!item) return
+    const safe = (value.trim() || item.name).replace(/[/\\]/g, '-')
+    onUploadAsset(`/assets/${safe}`, item.data)
   }
 
   const onFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (!f) return
-    const buf = new Uint8Array(await f.arrayBuffer())
-    onUploadAsset(`/assets/${f.name}`, buf)
+    const files = e.target.files
+    if (files && files.length) await queueUploads(files)
     e.target.value = ''
   }
 
@@ -115,9 +128,20 @@ export function FileTree({ files, activePath, onOpenFile, onNewFile, onRequestDe
         />
         <label className="file-asset-btn rounded px-2 py-1 text-xs cursor-pointer">
           Asset+
-          <input type="file" className="hidden" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={onFilePicked} />
+          <input type="file" multiple className="hidden" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={onFilePicked} />
         </label>
       </div>
+      <PromptDialog
+        key={pending.length + ':' + (pending[0]?.name ?? '')}
+        open={pending.length > 0}
+        title="Name asset"
+        description="Set a filename for the dropped image before adding it to your project."
+        initialValue={pending[0]?.name ?? ''}
+        confirmLabel="Add"
+        cancelLabel="Discard"
+        onCancel={() => setPending([])}
+        onConfirm={confirmAsset}
+      />
     </div>
   )
 }

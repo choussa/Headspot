@@ -8,6 +8,7 @@ type AwarenessListener = (event: { added: number[]; updated: number[]; removed: 
 
 /** Minimal awareness-compatible shim over a Supabase Realtime broadcast channel. */
 export class SupabaseAwareness {
+  managerBus: BroadcastChannel | null = null
   states = new Map<number, Record<string, unknown> | null>()
   private listeners = new Set<AwarenessListener>()
   doc: Y.Doc
@@ -36,6 +37,7 @@ export class SupabaseAwareness {
     this.states.set(this.doc.clientID, state)
     this.emit({ added: updated ? [] : [this.doc.clientID], updated: updated ? [this.doc.clientID] : [], removed: [] })
     void this.channel.send({ type: 'broadcast', event: 'collab', payload: { type: 'awareness', path: this.path, clientId: this.doc.clientID, state } })
+    this.managerBus?.postMessage({ type: 'awareness', path: this.path, clientId: this.doc.clientID, state })
   }
 
   setLocalStateField(field: string, value: unknown) {
@@ -90,11 +92,14 @@ export class CollabManager {
   private channel: RealtimeChannel
   private sessions = new Map<string, CollabSession>()
   private user: CollabUser | null = null
+  private localBus: BroadcastChannel | null = null
 
   constructor(projectId: string) {
+    this.localBus = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(`headspot-project-${projectId}`) : null
     this.channel = supabase.channel(`project:${projectId}`)
     this.channel.on('broadcast', { event: 'collab' }, ({ payload }) => this.onPayload(payload))
     void this.channel.subscribe()
+    this.localBus?.addEventListener('message', (e) => this.onPayload(e.data))
     supabase.auth.getUser().then(({ data }) => {
       const email = data.user?.email ?? 'Anonymous'
       this.user = {
@@ -112,14 +117,16 @@ export class CollabManager {
     const ydoc = new Y.Doc()
     const ytext = ydoc.getText('text')
     const awareness = new SupabaseAwareness(ydoc, this.channel, path)
+    awareness.managerBus = this.localBus
 
     ydoc.on('update', (update: Uint8Array, origin) => {
-      if (origin === 'remote') return
+      if (origin === 'remote' || origin === 'local-seed') return
       void this.channel.send({
         type: 'broadcast',
         event: 'collab',
         payload: { type: 'update', path, update: base64Encode(update) },
       })
+      this.localBus?.postMessage({ type: 'update', path, update: base64Encode(update) })
     })
 
     let seeded = false
@@ -131,8 +138,8 @@ export class CollabManager {
         if (seeded || gotRemoteState) return
         seeded = true
         if (ytext.length === 0) {
-          ytext.insert(0, initialText)
-          this.broadcastFullState(path, ydoc)
+          ydoc.transact(() => ytext.insert(0, initialText), 'local-seed')
+          void this.broadcastFullState(path, ydoc)
         }
         resolve()
       }
@@ -152,17 +159,15 @@ export class CollabManager {
       markRemoteState: () => { gotRemoteState = true },
     }
 
-    void this.channel.send({ type: 'broadcast', event: 'collab', payload: { type: 'sync-request', path } })
+    const sp = { type: 'sync-request', path }; void this.channel.send({ type: 'broadcast', event: 'collab', payload: sp }); this.localBus?.postMessage(sp)
     this.sessions.set(path, session)
     return session
   }
 
   private broadcastFullState(path: string, ydoc: Y.Doc) {
-    void this.channel.send({
-      type: 'broadcast',
-      event: 'collab',
-      payload: { type: 'full-state', path, update: base64Encode(Y.encodeStateAsUpdate(ydoc)) },
-    })
+    const payload = { type: 'full-state', path, update: base64Encode(Y.encodeStateAsUpdate(ydoc)) }
+    void this.channel.send({ type: 'broadcast', event: 'collab', payload })
+    this.localBus?.postMessage(payload)
   }
 
   private onPayload(payload: any) {
@@ -186,6 +191,7 @@ export class CollabManager {
       case 'sync-request': {
         const s = this.sessions.get(payload.path)
         if (s) this.broadcastFullState(payload.path, s.ydoc)
+        else { const np = { type: 'no-session', path: payload.path }; void this.channel.send({ type: 'broadcast', event: 'collab', payload: np }); this.localBus?.postMessage(np) }
         break
       }
       case 'awareness': {
