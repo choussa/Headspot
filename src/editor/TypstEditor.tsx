@@ -124,27 +124,43 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
-    if (collab) {
-      const text = collab.ytext.toString()
+    const activeCollab = collab && collab.path === activePath ? collab : null
+    if (activeCollab) {
+      const text = activeCollab.ytext.toString()
       if (view.state.doc.toString() !== text) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
       }
     } else if (view.state.doc.toString() !== doc) {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc } })
     }
-    projectRef.current?.setText(activePath, collab ? collab.ytext.toString() : doc)
+    projectRef.current?.setText(activePath, activeCollab ? activeCollab.ytext.toString() : doc)
     viewRef.current?.dispatch({ effects: pathCompartment.current.reconfigure(typstFilePath.of(activePath)) })
   }, [doc, activePath, collab])
 
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
+    const activeCollab = collab && collab.path === activePath ? collab : null
+    if (activeCollab) {
+      const ytext = activeCollab.ytext.toString()
+      const current = view.state.doc.toString()
+      if (!activeCollab.hasRemoteState()) {
+        if (ytext !== current) {
+          activeCollab.ydoc.transact(() => {
+            if (activeCollab.ytext.length > 0) activeCollab.ytext.delete(0, activeCollab.ytext.length)
+            if (current.length > 0) activeCollab.ytext.insert(0, current)
+          }, 'local-sync')
+        }
+      } else if (ytext !== current) {
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: ytext } })
+      }
+    }
     view.dispatch({
       effects: collabCompartment.current.reconfigure(
-        collab ? yCollab(collab.ytext, collab.awareness, { undoManager: false }) : [],
+        activeCollab ? yCollab(activeCollab.ytext, activeCollab.awareness, { undoManager: false }) : [],
       ),
     })
-  }, [collab])
+  }, [collab, activePath])
 
   useEffect(() => {
     const view = viewRef.current

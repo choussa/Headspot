@@ -1,3 +1,13 @@
+export interface PackageConfig {
+  name: string
+  version: string
+  description: string
+  entrypoint: string
+  isTemplate: boolean
+  templateDir?: string
+  templateEntrypoint?: string
+}
+
 export interface ProjectMeta {
   id: string
   name: string
@@ -5,6 +15,7 @@ export interface ProjectMeta {
   thumbnail?: string | null
   createdAt: number
   updatedAt: number
+  packageConfig?: PackageConfig
 }
 
 export interface ProjectFile {

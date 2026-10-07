@@ -53,6 +53,7 @@ export async function loadProject(id: string): Promise<ProjectRecord | undefined
       thumbnail: projectData.thumbnail,
       createdAt: new Date(projectData.created_at).getTime(),
       updatedAt: new Date(projectData.updated_at).getTime(),
+      packageConfig: projectData.package_config ?? undefined,
     },
     files: await Promise.all(fileData.map(async (f: any) => {
       if (f.kind === 'asset') {
@@ -92,6 +93,7 @@ async function saveProjectOnline(record: ProjectRecord): Promise<void> {
       owner_id: user.user.id,
       name: record.meta.name,
       thumbnail: record.meta.thumbnail,
+      package_config: record.meta.packageConfig ?? null,
       updated_at: new Date().toISOString(),
     })
   

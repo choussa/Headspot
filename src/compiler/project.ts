@@ -1,7 +1,9 @@
 import { TypstProject, type CompileResult, type RenderedSvgPage } from '@vedivad/typst-web-service'
 import type { ProjectFile } from '../state/workspace'
+import { injectLocalPackages, type LocalPackageCtx } from './localPackages'
 
 export type { CompileResult, RenderedSvgPage }
+export type { LocalPackageCtx }
 
 export class Project {
   private vp: TypstProject | null = null
@@ -38,9 +40,16 @@ export class Project {
     if (Object.keys(text).length > 0) await this.vp.setMany(text)
   }
 
-  async compileProject(files: ProjectFile[]): Promise<CompileResult | null> {
+  async compileProject(files: ProjectFile[], ctx?: LocalPackageCtx): Promise<CompileResult | null> {
     const mySeq = ++this.seq
     await this.syncFiles(files)
+    if (ctx) {
+      try {
+        await injectLocalPackages(this.vp!, ctx, files)
+      } catch (err) {
+        console.warn('[headspot] @local package resolution failed', err)
+      }
+    }
     const res = await this.vp!.compile()
     if (mySeq !== this.seq) return null
     return res

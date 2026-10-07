@@ -65,10 +65,12 @@ export interface CollabSession {
   ydoc: Y.Doc
   ytext: Y.Text
   awareness: SupabaseAwareness
+  path: string
   ready: Promise<void>
   resolveReady: () => void
   canAcceptFullState: () => boolean
   markRemoteState: () => void
+  hasRemoteState: () => boolean
 }
 
 const PALETTE = ['#e5484d', '#3e63dd', '#12a594', '#f76b15', '#8e4ec6', '#0091ff']
@@ -150,6 +152,7 @@ export class CollabManager {
       ydoc,
       ytext,
       awareness,
+      path,
       ready: ready.then(() => {
         if (this.user) awareness.setLocalState({ user: this.user })
         return undefined
@@ -157,6 +160,7 @@ export class CollabManager {
       resolveReady: () => resolveReady(),
       canAcceptFullState: () => !seeded,
       markRemoteState: () => { gotRemoteState = true },
+      hasRemoteState: () => gotRemoteState,
     }
 
     const sp = { type: 'sync-request', path }; void this.channel.send({ type: 'broadcast', event: 'collab', payload: sp }); this.localBus?.postMessage(sp)
@@ -175,7 +179,10 @@ export class CollabManager {
     switch (payload.type) {
       case 'update': {
         const s = this.sessions.get(payload.path)
-        if (s) Y.applyUpdate(s.ydoc, base64Decode(payload.update), 'remote')
+        if (s) {
+          s.markRemoteState()
+          Y.applyUpdate(s.ydoc, base64Decode(payload.update), 'remote')
+        }
         break
       }
       case 'full-state': {

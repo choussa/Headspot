@@ -118,3 +118,19 @@
 .page-spinner-full { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: var(--app-bg); color: var(--accent-text); }
 
 .cm-comment-anchor { background: rgba(255, 200, 0, 0.2); border-bottom: 2px solid var(--accent-orange, #f76b15); }
+
+/* Floating comment popover: brand-orange card with a small tail pointing at the anchor. */
+.comment-popover { z-index: 60; }
+.comment-popover::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--accent-orange);
+  border-top: 1px solid var(--accent-orange);
+  transform: rotate(45deg);
+  top: -6px;
+  left: 18px;
+}
+.comment-popover--above::after { top: auto; bottom: -6px; transform: rotate(225deg); }

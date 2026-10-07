@@ -30,16 +30,19 @@ import { OutlinePanel } from '../components/OutlinePanel'
 import { HistoryPanel } from '../components/HistoryPanel'
 import { CopilotPanel } from '../components/CopilotPanel'
 import { takeSnapshot, type Snapshot } from '../storage/history'
-import { listComments, saveComments, type ProjectComment } from '../storage/comments'
+import { listComments, saveComments, fetchComments, putComment, removeCommentRow, type ProjectComment } from '../storage/comments'
+import { CommentPopover, type PopoverAnchor } from '../components/CommentPopover'
 import { CommentsPanel } from '../components/CommentsPanel'
+import { PackageSettings } from '../components/PackageSettings'
+import { TomlPackageForm, parseTomlConfig } from '../components/TomlPackageForm'
 import { PresentationMode } from '../components/PresentationMode'
 import { ExportPanel } from '../components/ExportPanel'
 import { ConfirmDialog, PromptDialog } from '../components/Dialogs'
 import {
   ArrowLeft, Search, Settings, Download, Undo2, Redo2, Loader2,
-  RotateCw, Minus, Plus, Maximize2, ChevronDown, List, ListOrdered, Sigma, Code, AtSign,
+  RotateCw, Minus, Plus, Maximize2, ChevronDown, List, ListOrdered, Sigma, Code, AtSign, FormInput,
   TriangleAlert,
-  BookOpen, Package, CircleHelp, Cloud, Layout, Book, Files
+  BookOpen, Package, CircleHelp, Cloud, Layout, Book, Files, MessageSquarePlus
 } from 'lucide-react'
 
 const project = new Project()
@@ -75,12 +78,22 @@ export function EditorPage() {
   const [renameOpen, setRenameOpen] = useState(false)
   const [presenting, setPresenting] = useState(false)
   const [comments, setComments] = useState<ProjectComment[]>([])
+  const [popover, setPopover] = useState<{ commentId: string | null; range: { from: number; to: number }; anchor: PopoverAnchor } | null>(null)
+  const [selAnchor, setSelAnchor] = useState<PopoverAnchor | null>(null)
   const [email, setEmail] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const userIdRef = useRef<string | null>(null)
+  const [packageViewOpen, setPackageViewOpen] = useState(false)
   const [exportPanelOpen, setExportPanelOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [assetQueue, setAssetQueue] = useState<{ name: string; data: Uint8Array }[]>([])
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null))
+    void supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user.email ?? null)
+      const uid = data.session?.user.id ?? null
+      setUserId(uid)
+      userIdRef.current = uid
+    })
   }, [])
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
@@ -93,7 +106,8 @@ export function EditorPage() {
   const runCompile = useCallback(async (files: ProjectFile[]) => {
     setCompiling(true)
     try {
-      const res = await project.compileProject(files)
+      const r = recordRef.current
+      const res = await project.compileProject(files, r ? { ownerId: userIdRef.current, packageConfig: r.meta.packageConfig } : undefined)
       if (res) {
         setPages(res.pages)
         setDiagnostics(res.diagnostics)
@@ -332,6 +346,7 @@ export function EditorPage() {
     { label: 'Export SVG', onSelect: () => void onExportSvg() },
     { label: 'Export PNG', onSelect: () => void onExportPng() },
     { label: 'Publish to web', onSelect: () => void onPublish() },
+    { label: 'Package settings…', onSelect: () => setPackageViewOpen(true) },
     { label: 'Delete project…', onSelect: () => setConfirmDelete(true) },
     { label: 'Close', onSelect: () => navigate('/') },
   ]
@@ -398,7 +413,7 @@ export function EditorPage() {
 
   const onPublish = useCallback(async () => {
     if (!record) return
-    const res = await project.compileProject(record.files)
+    const res = await project.compileProject(record.files, { ownerId: userIdRef.current, packageConfig: record.meta.packageConfig })
     if (!res || res.pages.length === 0) return
     const svgs = await Promise.all(res.pages.map((_, i) => project.renderPage(i)))
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${record.meta.name}</title><style>body{margin:0;background:#444;display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px}svg{background:#fff;max-width:100%;height:auto;box-shadow:0 4px 24px rgba(0,0,0,.4)}</style></head><body>${svgs.filter(Boolean).join('\n')}</body></html>`
@@ -413,38 +428,79 @@ export function EditorPage() {
 
   const activeFile = record ? fileByPath(record.files, activeFilePath) : undefined
 
-  const onAddComment = useCallback((text: string) => {
+  const persistComments = useCallback((next: ProjectComment[]) => {
     const r = recordRef.current
     if (!r) return
+    setComments(next)
+    saveComments(r.meta.id, next)
+  }, [])
+
+  const anchorFor = useCallback((from: number, to: number): PopoverAnchor | null => {
+    const v = editorViewRef.current
+    if (!v) return null
+    const a = v.coordsAtPos(from)
+    const b = v.coordsAtPos(to)
+    if (!a) return null
+    const bottom = Math.max(a.bottom, b?.bottom ?? a.bottom)
+    const top = Math.min(a.top, b?.top ?? a.top)
+    const left = Math.min(a.left, b?.left ?? a.left)
+    const spaceBelow = window.innerHeight - bottom
+    const above = spaceBelow < 280 && top > spaceBelow
+    const x = Math.max(12, Math.min(left, window.innerWidth - 316))
+    const y = above ? Math.max(12, top - 8) : Math.min(bottom + 8, window.innerHeight - 12)
+    return { x, y, above }
+  }, [])
+
+  const openPopoverFor = useCallback((commentId: string, from: number, to: number) => {
+    const a = anchorFor(from, to)
+    if (!a) return
+    setPopover({ commentId, range: { from, to }, anchor: a })
+  }, [anchorFor])
+
+  const onAddComment = useCallback((text: string) => {
+    const r = recordRef.current
+    if (!r || !text.trim()) return
     const v = editorViewRef.current
     const sel = v?.state.selection.main
     const from = sel?.from ?? 0
     const to = sel?.to ?? from
-    const next: ProjectComment[] = [...comments, { id: crypto.randomUUID(), path: activeFilePath, from, to, text, author: email?.split('@')[0] ?? 'You', ts: Date.now(), resolved: false }]
-    setComments(next)
-    saveComments(r.meta.id, next)
-  }, [comments, activeFilePath, email])
+    const c: ProjectComment = { id: crypto.randomUUID(), path: activeFilePath, from, to, text: text.trim(), author: email?.split('@')[0] ?? 'You', ts: Date.now(), resolved: false, replies: [] }
+    persistComments([...comments, c])
+    void putComment(r.meta.id, c)
+    openPopoverFor(c.id, from, to)
+  }, [comments, activeFilePath, email, persistComments, openPopoverFor])
+
+  const onChangeComment = useCallback((c: ProjectComment) => {
+    const r = recordRef.current
+    if (!r) return
+    persistComments(comments.map((x) => (x.id === c.id ? c : x)))
+    void putComment(r.meta.id, c)
+  }, [comments, persistComments])
 
   const onResolveComment = useCallback((id: string) => {
     const r = recordRef.current
     if (!r) return
-    const next = comments.map((c) => (c.id === id ? { ...c, resolved: !c.resolved } : c))
-    setComments(next)
-    saveComments(r.meta.id, next)
-  }, [comments])
+    const target = comments.find((c) => c.id === id)
+    if (!target) return
+    const next = { ...target, resolved: !target.resolved }
+    persistComments(comments.map((c) => (c.id === id ? next : c)))
+    void putComment(r.meta.id, next)
+  }, [comments, persistComments])
 
   const onDeleteComment = useCallback((id: string) => {
     const r = recordRef.current
     if (!r) return
-    const next = comments.filter((c) => c.id !== id)
-    setComments(next)
-    saveComments(r.meta.id, next)
-  }, [comments])
+    persistComments(comments.filter((c) => c.id !== id))
+    void removeCommentRow(id)
+    setPopover((p) => (p?.commentId === id ? null : p))
+  }, [comments, persistComments])
 
 
   const editorViewRef = useRef<EditorView | null>(null)
   const recordRef = useRef(record)
   recordRef.current = record
+  const activeFilePathRef = useRef(activeFilePath)
+  activeFilePathRef.current = activeFilePath
   const navRef = useRef<PreviewNavigator | null>(null)
   const cursorTimer = useRef<number | undefined>(undefined)
   const collabMgrRef = useRef<CollabManager | null>(null)
@@ -462,16 +518,18 @@ export function EditorPage() {
 
   useEffect(() => {
     const mgr = collabMgrRef.current
-    if (!mgr || !record) return
-    const file = fileByPath(record.files, activeFilePath)
+    const r = recordRef.current
+    if (!mgr || !r) return
+    const file = fileByPath(r.files, activeFilePath)
     if (!file || file.kind !== 'source') {
       setCollabSession(null)
       return
     }
+    setCollabSession((prev) => (prev && prev.path === activeFilePath ? prev : null))
     let cancelled = false
     const session = mgr.sessionFor(activeFilePath, file.text ?? '')
     void session.ready.then(() => {
-      if (!cancelled) setCollabSession(session)
+      if (!cancelled && session.path === activeFilePathRef.current) setCollabSession(session)
     })
     return () => { cancelled = true }
   }, [activeFilePath, record, id])
@@ -549,10 +607,75 @@ export function EditorPage() {
   }, [])
 
   const [currentSelection, setCurrentSelection] = useState('')
+  const [tomlMode, setTomlMode] = useState<'form' | 'code'>('form')
 
   useEffect(() => {
-    if (record) setComments(listComments(record.meta.id))
+    const pid = record?.meta.id
+    if (!pid) return
+    let cancelled = false
+    void (async () => {
+      const remote = await fetchComments(pid)
+      if (cancelled) return
+      if (remote === null) {
+        setComments(listComments(pid))
+        return
+      }
+      if (remote.length === 0) {
+        const local = listComments(pid)
+        if (local.length > 0) {
+          setComments(local)
+          await Promise.all(local.map((c) => putComment(pid, c)))
+          return
+        }
+      }
+      setComments(remote)
+    })()
+    return () => { cancelled = true }
   }, [record?.meta.id])
+
+  useEffect(() => {
+    setPopover(null)
+    setSelAnchor(null)
+  }, [activeFilePath])
+
+  useEffect(() => {
+    if (popover?.commentId && !comments.some((c) => c.id === popover.commentId)) setPopover(null)
+  }, [comments, popover])
+
+  useEffect(() => {
+    const view = editorViewRef.current
+    if (!view || activeFile?.kind !== 'source') return
+    const dom = view.dom
+    const onClick = (e: MouseEvent) => {
+      const t = e.target
+      if (!(t instanceof Element) || !t.closest('.cm-comment-anchor')) return
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY })
+      if (pos == null) return
+      const c = comments.find((c) => c.path === activeFilePath && !c.resolved && pos >= c.from && pos <= c.to)
+      if (c) openPopoverFor(c.id, c.from, c.to)
+    }
+    dom.addEventListener('click', onClick)
+    return () => dom.removeEventListener('click', onClick)
+  }, [comments, activeFilePath, activeFile?.kind, openPopoverFor])
+
+  useEffect(() => {
+    if (!popover) return
+    const onDown = (e: MouseEvent) => {
+      const t = e.target
+      if (t instanceof Element && (t.closest('.comment-popover') || t.closest('.cm-comment-anchor'))) return
+      setPopover(null)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPopover(null) }
+    const onScroll = () => setPopover(null)
+    document.addEventListener('mousedown', onDown, true)
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', onDown, true)
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('scroll', onScroll, true)
+    }
+  }, [popover])
 
   const onEditorCursor = useCallback((offset: number) => {
     window.clearTimeout(cursorTimer.current)
@@ -745,7 +868,7 @@ export function EditorPage() {
           <button aria-label="Outline" title="Outline" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'outline' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'outline' ? null : 'outline')}>
             <BookOpen size={18} />
           </button>
-          <button aria-label="Packages" title="Packages" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'packages' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'packages' ? null : 'packages')}>
+          <button aria-label="Packages" title="Package & template settings" className={`p-2 rounded text-fg-2 hover:text-fg ${packageViewOpen ? 'rail-active' : ''}`} onClick={() => setPackageViewOpen((v) => !v)}>
             <Package size={18} />
           </button>
 
@@ -875,32 +998,75 @@ export function EditorPage() {
           vertical={prefs.splitVertical}
           left={
             activeFile?.kind === 'source' ? (
-              <TypstEditor
-                engine={project.getEngine()!}
-                doc={activeFile.text ?? ''}
-                activePath={activeFilePath}
-                onChange={onEditorChange}
-                diagnostics={diagnostics}
-                wrapLines={prefs.wrapLines}
-                showLineNumbers={prefs.showLineNumbers}
-                fontSize={prefs.fontSize}
-                fontFamily={prefs.fontFamily}
-                dark={prefs.theme === 'dark' || (prefs.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
-                vimMode={prefs.vimMode}
-                writingDirection={prefs.writingDirection}
-                spellcheck={prefs.spellcheck}
-                commentRanges={comments.filter((c) => c.path === activeFilePath && !c.resolved).map((c) => ({ from: c.from, to: c.to }))}
-                externalViewRef={editorViewRef}
-                onCursor={(offset) => {
-                  onEditorCursor(offset)
-                  const v = editorViewRef.current
-                  if (v) {
-                    const { from, to } = v.state.selection.main
-                    setCurrentSelection(v.state.sliceDoc(from, to))
-                  }
-                }}
-                collab={collabSession}
-              />
+              activeFilePath.replace(/^\/+/, '').endsWith('typst.toml') && tomlMode === 'form' ? (
+                <div className="relative h-full">
+                  <TomlPackageForm
+                    key={activeFilePath}
+                    text={activeFile.text ?? ''}
+                    sourceFiles={record?.files.filter((f) => f.kind === 'source') ?? []}
+                    onChange={(toml, cfg) => {
+                      setRecord((prev) => {
+                        if (!prev) return prev
+                        const next = {
+                          ...prev,
+                          files: setFileText(prev.files, activeFilePath, toml),
+                          meta: cfg ? { ...prev.meta, packageConfig: cfg } : prev.meta,
+                        }
+                        persist(next)
+                        return next
+                      })
+                    }}
+                  />
+                  <button
+                    className="absolute top-2 right-2 p-1.5 rounded border border-line bg-panel text-fg-2 hover:text-fg hover:bg-raised"
+                    title="Edit as code"
+                    aria-label="Edit as code"
+                    onClick={() => setTomlMode('code')}
+                  >
+                    <Code size={14} />
+                  </button>
+                </div>
+              ) : (
+              <div className="relative h-full">
+                <TypstEditor
+                  engine={project.getEngine()!}
+                  doc={activeFile.text ?? ''}
+                  activePath={activeFilePath}
+                  onChange={onEditorChange}
+                  diagnostics={diagnostics}
+                  wrapLines={prefs.wrapLines}
+                  showLineNumbers={prefs.showLineNumbers}
+                  fontSize={prefs.fontSize}
+                  fontFamily={prefs.fontFamily}
+                  dark={prefs.theme === 'dark' || (prefs.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)}
+                  vimMode={prefs.vimMode}
+                  writingDirection={prefs.writingDirection}
+                  spellcheck={prefs.spellcheck}
+                  commentRanges={comments.filter((c) => c.path === activeFilePath && !c.resolved).map((c) => ({ from: c.from, to: c.to }))}
+                  externalViewRef={editorViewRef}
+                  onCursor={(offset) => {
+                    onEditorCursor(offset)
+                    const v = editorViewRef.current
+                    if (v) {
+                      const { from, to } = v.state.selection.main
+                      setCurrentSelection(v.state.sliceDoc(from, to))
+                      setSelAnchor(from !== to && activeFile?.kind === 'source' ? anchorFor(from, to) : null)
+                    }
+                  }}
+                  collab={collabSession}
+                />
+                {activeFilePath.replace(/^\/+/, '').endsWith('typst.toml') && (
+                  <button
+                    className="absolute top-2 right-2 p-1.5 rounded border border-line bg-panel text-fg-2 hover:text-fg hover:bg-raised z-10"
+                    title="Edit as form"
+                    aria-label="Edit as form"
+                    onClick={() => setTomlMode('form')}
+                  >
+                    <FormInput size={14} />
+                  </button>
+                )}
+              </div>
+              )
             ) : (
               <div className="p-4 text-sm text-fg-2">Select a .typ file to edit, or upload an asset.</div>
             )
@@ -990,6 +1156,68 @@ export function EditorPage() {
         onCancel={() => setRenameOpen(false)}
         onConfirm={(value) => { setRenameOpen(false); void onRenameProject(value) }}
       />
+
+      {packageViewOpen && record && (
+        <PackageSettings
+          record={record}
+          ownerId={userId}
+          onClose={() => setPackageViewOpen(false)}
+          onUpdateConfig={(cfg) => {
+            const r = recordRef.current
+            if (!r) return
+            const next = { ...r, meta: { ...r.meta, packageConfig: cfg } }
+            setRecord(next)
+            persist(next)
+          }}
+        />
+      )}
+
+      {selAnchor && !popover && activeFile?.kind === 'source' && (
+        <button
+          className="fixed z-40 p-1.5 rounded-md border border-brand bg-panel text-brand shadow-lg hover:bg-raised"
+          style={{ left: selAnchor.x, top: selAnchor.y }}
+          title="Add comment"
+          aria-label="Add comment"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const v = editorViewRef.current
+            if (!v) return
+            const { from, to } = v.state.selection.main
+            if (from === to) return
+            setSelAnchor(null)
+            setPopover({ commentId: null, range: { from, to }, anchor: selAnchor })
+          }}
+        >
+          <MessageSquarePlus size={14} />
+        </button>
+      )}
+
+      {(() => {
+        if (!popover) return null
+        const c = popover.commentId ? comments.find((x) => x.id === popover.commentId) ?? null : null
+        const pos = c ? { from: c.from, to: c.to } : popover.range
+        if (!pos) return null
+        return (
+          <CommentPopover
+            comment={c}
+            line={(() => { try { return editorViewRef.current?.state.doc.lineAt(pos.from).number ?? 1 } catch { return 1 } })()}
+            anchor={popover.anchor}
+            me={email?.split('@')[0] ?? 'You'}
+            onClose={() => setPopover(null)}
+            onCreate={(text) => {
+              const r = recordRef.current
+              if (!r || !text.trim()) return
+              const nc: ProjectComment = { id: crypto.randomUUID(), path: activeFilePath, from: pos.from, to: pos.to, text: text.trim(), author: email?.split('@')[0] ?? 'You', ts: Date.now(), resolved: false, replies: [] }
+              persistComments([...comments, nc])
+              void putComment(r.meta.id, nc)
+              setPopover((p) => (p ? { ...p, commentId: nc.id } : p))
+            }}
+            onChange={onChangeComment}
+            onDelete={onDeleteComment}
+            onJump={(from) => onJumpComment(c?.path ?? activeFilePath, from)}
+          />
+        )
+      })()}
     </div>
   )
 }
