@@ -11,6 +11,7 @@ export class SupabaseAwareness {
   managerBus: BroadcastChannel | null = null
   states = new Map<number, Record<string, unknown> | null>()
   private listeners = new Set<AwarenessListener>()
+  private lastSeen = new Map<number, number>()
   doc: Y.Doc
   private channel: RealtimeChannel
   private path: string
@@ -36,8 +37,32 @@ export class SupabaseAwareness {
     const updated = this.states.has(this.doc.clientID)
     this.states.set(this.doc.clientID, state)
     this.emit({ added: updated ? [] : [this.doc.clientID], updated: updated ? [this.doc.clientID] : [], removed: [] })
+    this.announce(state)
+  }
+
+  /** Re-broadcast the current local state without notifying local listeners (used as a heartbeat). */
+  heartbeat() {
+    const state = this.states.get(this.doc.clientID)
+    if (state) this.announce(state)
+  }
+
+  private announce(state: Record<string, unknown> | null) {
     void this.channel.send({ type: 'broadcast', event: 'collab', payload: { type: 'awareness', path: this.path, clientId: this.doc.clientID, state } })
     this.managerBus?.postMessage({ type: 'awareness', path: this.path, clientId: this.doc.clientID, state })
+  }
+
+  /** Drop remote peers that have not announced themselves within the timeout (dead tabs). */
+  sweep(timeoutMs = 30_000) {
+    const now = Date.now()
+    for (const [clientId, seen] of this.lastSeen) {
+      if (clientId === this.doc.clientID) continue
+      if (now - seen <= timeoutMs) continue
+      this.lastSeen.delete(clientId)
+      if (this.states.has(clientId)) {
+        this.states.delete(clientId)
+        this.emit({ added: [], updated: [], removed: [clientId] })
+      }
+    }
   }
 
   setLocalStateField(field: string, value: unknown) {
@@ -51,9 +76,14 @@ export class SupabaseAwareness {
   }
 
   applyRemote(clientId: number, state: Record<string, unknown> | null) {
+    this.lastSeen.set(clientId, Date.now())
     const isNew = !this.states.has(clientId)
+    const prev = this.states.get(clientId)
     this.states.set(clientId, state)
-    this.emit({ added: isNew ? [clientId] : [], updated: isNew ? [] : [clientId], removed: [] })
+    // Skip "updated" when the state is unchanged so heartbeats don't re-render every peer.
+    if (isNew || JSON.stringify(prev ?? null) !== JSON.stringify(state ?? null)) {
+      this.emit({ added: isNew ? [clientId] : [], updated: isNew ? [] : [clientId], removed: [] })
+    }
   }
 
   private emit(event: { added: number[]; updated: number[]; removed: number[] }) {
@@ -71,6 +101,8 @@ export interface CollabSession {
   canAcceptFullState: () => boolean
   markRemoteState: () => void
   hasRemoteState: () => boolean
+  /** True once this session has pushed its state in response to a peer's step2 (prevents ping-pong). */
+  pushed: boolean
 }
 
 const PALETTE = ['#e5484d', '#3e63dd', '#12a594', '#f76b15', '#8e4ec6', '#0091ff']
@@ -95,13 +127,35 @@ export class CollabManager {
   private sessions = new Map<string, CollabSession>()
   private user: CollabUser | null = null
   private localBus: BroadcastChannel | null = null
+  private destroyed = false
+  private retries = 0
+  private retryTimer: number | undefined
+  private livenessTimer: number | undefined
 
   constructor(projectId: string) {
     this.localBus = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(`headspot-project-${projectId}`) : null
     this.channel = supabase.channel(`project:${projectId}`)
     this.channel.on('broadcast', { event: 'collab' }, ({ payload }) => this.onPayload(payload))
-    void this.channel.subscribe()
+    // Register the status callback once; re-joins reuse it without stacking callbacks.
+    this.channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        const rejoining = this.retries > 0
+        this.retries = 0
+        // After an outage, re-announce presence and re-sync content for every open session.
+        if (rejoining) this.announceSessions()
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        this.scheduleRejoin()
+      }
+    })
     this.localBus?.addEventListener('message', (e) => this.onPayload(e.data))
+    // Heartbeat awareness + drop dead peers so presence survives reconnects.
+    this.livenessTimer = window.setInterval(() => {
+      if (this.destroyed) return
+      for (const s of this.sessions.values()) {
+        s.awareness.heartbeat()
+        s.awareness.sweep()
+      }
+    }, 10_000)
     supabase.auth.getUser().then(({ data }) => {
       const email = data.user?.email ?? 'Anonymous'
       this.user = {
@@ -110,6 +164,30 @@ export class CollabManager {
         colorLight: '#30bced33',
       }
     })
+  }
+
+  /** Re-broadcast awareness and request a content delta for each session (called on rejoin). */
+  private announceSessions() {
+    for (const [path, s] of this.sessions) {
+      s.pushed = false // allow one push per sync round
+      s.awareness.heartbeat()
+      const payload = { type: 'sync-request', path, sv: base64Encode(Y.encodeStateVector(s.ydoc)) }
+      void this.channel.send({ type: 'broadcast', event: 'collab', payload })
+      this.localBus?.postMessage(payload)
+    }
+  }
+
+  /** Exponential backoff re-join for long outages (supabase-js only retries briefly). */
+  private scheduleRejoin() {
+    if (this.destroyed || this.retryTimer !== undefined) return
+    const delay = Math.min(30_000, 1_000 * 2 ** Math.min(this.retries++, 5))
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = undefined
+      if (this.destroyed) return
+      if (this.channel.state !== 'joined' && this.channel.state !== 'joining') {
+        void this.channel.subscribe()
+      }
+    }, delay)
   }
 
   sessionFor(path: string, initialText: string): CollabSession {
@@ -161,9 +239,12 @@ export class CollabManager {
       canAcceptFullState: () => !seeded,
       markRemoteState: () => { gotRemoteState = true },
       hasRemoteState: () => gotRemoteState,
+      pushed: false,
     }
 
-    const sp = { type: 'sync-request', path }; void this.channel.send({ type: 'broadcast', event: 'collab', payload: sp }); this.localBus?.postMessage(sp)
+    const sp = { type: 'sync-request', path, sv: base64Encode(Y.encodeStateVector(ydoc)) }
+    void this.channel.send({ type: 'broadcast', event: 'collab', payload: sp })
+    this.localBus?.postMessage(sp)
     this.sessions.set(path, session)
     return session
   }
@@ -182,6 +263,7 @@ export class CollabManager {
         if (s) {
           s.markRemoteState()
           Y.applyUpdate(s.ydoc, base64Decode(payload.update), 'remote')
+          s.resolveReady()
         }
         break
       }
@@ -197,8 +279,41 @@ export class CollabManager {
       }
       case 'sync-request': {
         const s = this.sessions.get(payload.path)
-        if (s) this.broadcastFullState(payload.path, s.ydoc)
-        else { const np = { type: 'no-session', path: payload.path }; void this.channel.send({ type: 'broadcast', event: 'collab', payload: np }); this.localBus?.postMessage(np) }
+        if (!s) {
+          const np = { type: 'no-session', path: payload.path }
+          void this.channel.send({ type: 'broadcast', event: 'collab', payload: np })
+          this.localBus?.postMessage(np)
+          break
+        }
+        // Yjs sync step 2: reply with only the updates the requester is missing.
+        const sv = typeof payload.sv === 'string' ? base64Decode(payload.sv) : undefined
+        const reply = {
+          type: 'sync-step2',
+          path: payload.path,
+          update: base64Encode(Y.encodeStateAsUpdate(s.ydoc, sv)),
+          sv: base64Encode(Y.encodeStateVector(s.ydoc)),
+        }
+        void this.channel.send({ type: 'broadcast', event: 'collab', payload: reply })
+        this.localBus?.postMessage(reply)
+        break
+      }
+      case 'sync-step2': {
+        const s = this.sessions.get(payload.path)
+        if (!s) break
+        s.markRemoteState()
+        Y.applyUpdate(s.ydoc, base64Decode(payload.update), 'remote')
+        s.resolveReady()
+        // First reply carries our state vector — push our missing delta back once (no ping-pong).
+        if (typeof payload.sv === 'string' && !s.pushed) {
+          s.pushed = true
+          const push = {
+            type: 'sync-step2',
+            path: payload.path,
+            update: base64Encode(Y.encodeStateAsUpdate(s.ydoc, base64Decode(payload.sv))),
+          }
+          void this.channel.send({ type: 'broadcast', event: 'collab', payload: push })
+          this.localBus?.postMessage(push)
+        }
         break
       }
       case 'awareness': {
@@ -210,6 +325,11 @@ export class CollabManager {
   }
 
   async destroy() {
+    this.destroyed = true
+    if (this.retryTimer !== undefined) window.clearTimeout(this.retryTimer)
+    if (this.livenessTimer !== undefined) window.clearInterval(this.livenessTimer)
+    this.localBus?.close()
+    this.localBus = null
     await supabase.removeChannel(this.channel)
     this.sessions.clear()
   }

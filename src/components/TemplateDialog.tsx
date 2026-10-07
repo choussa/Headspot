@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react'
-import { X, Search, ChevronDown, Star, Layers, Loader2 } from 'lucide-react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { X, Search, Star, Layers, Loader2 } from 'lucide-react'
 import {
   fetchTemplateIndex,
   fetchTemplateMeta,
@@ -14,23 +14,31 @@ interface Props {
   onCreate: (name: string, source: string) => void
 }
 
+/** Turn an id like `author-name` into a readable label. */
+function humanize(id: string): string {
+  const words = id.replace(/[_-]+/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id
+}
+
 export function TemplateDialog({ onClose, onCreate }: Props) {
   const [index, setIndex] = useState<TemplateIndexEntry[]>([])
+  const [indexLoading, setIndexLoading] = useState(true)
   const [selected, setSelected] = useState<TemplateIndexEntry | null>(null)
   const [meta, setMeta] = useState<TemplateMeta | null>(null)
+  const [metaLoading, setMetaLoading] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [creating, setCreating] = useState(false)
 
-  // Dropdown states (mocked for UI purposes)
-  const [selectedCategory] = useState('All categories')
-  const [selectedDiscipline] = useState('All disciplines')
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const titleId = useId()
 
   useEffect(() => {
     fetchTemplateIndex()
-      .then(setIndex)
-      .catch(() => setError('Could not load templates'))
+      .then((list) => { setIndex(list); setIndexLoading(false) })
+      .catch(() => { setError('Could not load templates. Check your connection and try again.'); setIndexLoading(false) })
   }, [])
 
   useEffect(() => {
@@ -39,21 +47,47 @@ export function TemplateDialog({ onClose, onCreate }: Props) {
       setValues({})
       return
     }
-    
-    // Clear previous meta while loading
+    let alive = true
     setMeta(null)
+    setMetaLoading(true)
     fetchTemplateMeta(selected.path)
       .then((m) => {
+        if (!alive) return
         setMeta(m)
         setValues(Object.fromEntries(m.variables.map((v) => [v.id, v.default ?? ''])))
       })
-      .catch(() => setError('Could not load template metadata'))
+      .catch(() => { if (alive) setError('Could not load template metadata.') })
+      .finally(() => { if (alive) setMetaLoading(false) })
+    return () => { alive = false }
   }, [selected])
 
+  useEffect(() => {
+    searchRef.current?.focus()
+  }, [])
+
+  // Focus trap + Escape, so keyboard users stay inside the modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const focusables = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input, [href], select, textarea, [tabindex]:not([tabindex="-1"])'),
+      ).filter((el) => el.offsetParent !== null)
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const filteredIndex = useMemo(() => {
-    return index.filter(t => 
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.toLowerCase()
+    return index.filter(t =>
+      t.name.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q)
     )
   }, [index, searchQuery])
 
@@ -64,135 +98,140 @@ export function TemplateDialog({ onClose, onCreate }: Props) {
     try {
       const src = await fetchTemplateSource(selected.path)
       onCreate(meta?.name ?? selected.name, renderTemplate(src, values))
-    } catch (e) {
-      setError('Could not create from template')
+    } catch {
+      setError('Could not create a project from this template.')
       setCreating(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div 
-        className="bg-[#1a1a1e] rounded-xl shadow-2xl w-full max-w-[960px] h-[650px] flex flex-col text-fg relative overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative flex h-[min(650px,90vh)] w-full max-w-[960px] flex-col overflow-hidden rounded-xl border border-line bg-app text-fg shadow-2xl"
       >
-        {/* Header */}
-        <div className="flex justify-between items-center p-5 border-b border-line shrink-0">
-          <h2 className="text-lg font-semibold text-white">Configure new project</h2>
-          <button onClick={onClose} className="text-fg-2 hover:text-white transition-colors">
+        <div className="flex shrink-0 items-center justify-between border-b border-line p-5">
+          <h2 id={titleId} className="text-lg font-semibold text-fg">Configure new project</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded p-1 text-fg-2 transition-colors hover:bg-raised hover:text-fg">
             <X size={20} />
           </button>
         </div>
 
-        {/* Filter Bar */}
-        <div className="flex items-center gap-4 p-5 pb-0 shrink-0">
-          <div className="flex-1 bg-panel border border-line rounded-md px-3 py-1.5 text-sm focus-within:border-brand focus-within:ring-1 focus-within:ring-brand flex items-center gap-2">
-            <Search size={16} className="text-fg-2" />
-            <input 
-              type="text" 
-              placeholder="Search templates" 
-              className="bg-transparent border-none outline-none text-white w-full placeholder:text-fg-3"
+        <div className="flex shrink-0 items-center gap-4 p-5 pb-0">
+          <div className="flex flex-1 items-center gap-2 rounded-md border border-line bg-panel px-3 py-1.5 text-sm focus-within:border-brand focus-within:ring-1 focus-within:ring-brand">
+            <Search size={16} className="text-fg-2" aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search templates"
+              placeholder="Search templates"
+              className="w-full border-none bg-transparent text-fg outline-none placeholder:text-fg-3"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
-          <div className="bg-panel border border-line rounded-md px-3 py-1.5 text-sm flex items-center justify-between gap-4 cursor-pointer hover:bg-raised min-w-[160px] text-white">
-            <Layers size={14} className="text-fg-2" />
-            <span className="flex-1">{selectedCategory}</span>
-            <ChevronDown size={14} className="text-fg-2" />
-          </div>
-
-          <div className="bg-panel border border-line rounded-md px-3 py-1.5 text-sm flex items-center justify-between gap-4 cursor-pointer hover:bg-raised min-w-[160px] text-white">
-            <span className="flex-1">{selectedDiscipline}</span>
-            <ChevronDown size={14} className="text-fg-2" />
-          </div>
         </div>
 
-        {/* Main Workspace */}
-        <div className="flex flex-1 min-h-0 p-5 gap-5">
-          {/* Left Pane (Grid) */}
-          <div className="flex-1 bg-panel/30 border border-line rounded-lg p-5 overflow-y-auto">
-            {error && !selected && <div className="text-danger mb-4">{error}</div>}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {filteredIndex.map((t) => {
-                const isSelected = selected?.id === t.id
-                return (
-                  <button 
-                    key={t.id} 
-                    className="flex flex-col items-center gap-3 cursor-pointer group w-full outline-none"
-                    onClick={() => {
-                      setSelected(t)
-                      setError(null)
-                    }}
-                  >
-                    <div className={`w-full aspect-[1/1.4] bg-white rounded shadow-sm relative overflow-hidden flex items-center justify-center transition-all ${isSelected ? 'ring-2 ring-brand ring-offset-2 ring-offset-[#1a1a1e]' : 'border border-line-2'}`}>
-                      {t.thumbnailUrl ? (
-                         <img src={t.thumbnailUrl} alt={t.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="text-gray-300 flex flex-col items-center gap-2">
-                           <Layers size={32} />
-                           <span className="text-xs font-medium px-4 text-center text-gray-400">{t.name}</span>
-                        </div>
-                      )}
-                      
-                      {/* Hover Overlay */}
-                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <div className="bg-[#1a1a1e] text-white p-2 rounded shadow-lg">
-                          <Search size={18} />
+        <div className="flex min-h-0 flex-1 flex-col gap-5 p-5 md:flex-row">
+          <div className="flex-1 overflow-y-auto rounded-lg border border-line bg-panel/30 p-5">
+            {error && !selected && (
+              <p role="alert" className="mb-4 text-sm text-danger">{error}</p>
+            )}
+            {indexLoading ? (
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4" aria-hidden="true">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <div key={i} className="flex flex-col items-center gap-3">
+                    <div className="aspect-[1/1.4] w-full animate-pulse rounded bg-raised" />
+                    <div className="h-5 w-24 animate-pulse rounded-full bg-raised" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4">
+                {filteredIndex.map((t) => {
+                  const isSelected = selected?.id === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      className="group flex w-full flex-col items-center gap-3 rounded outline-none"
+                      aria-pressed={isSelected}
+                      onClick={() => { setSelected(t); setError(null) }}
+                    >
+                      <div className={`relative flex aspect-[1/1.4] w-full items-center justify-center overflow-hidden rounded bg-white transition-all ${isSelected ? 'ring-2 ring-brand ring-offset-2 ring-offset-app' : 'border border-line-2'}`}>
+                        {t.thumbnailUrl ? (
+                          <img src={t.thumbnailUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-neutral-400">
+                            <Layers size={32} aria-hidden="true" />
+                            <span className="px-4 text-center text-xs font-medium text-neutral-500">{t.name}</span>
+                          </div>
+                        )}
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                          <div className="rounded bg-app p-2 text-fg shadow-lg">
+                            <Search size={18} aria-hidden="true" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className={`border rounded-full px-3 py-1 text-xs font-medium flex items-center gap-1.5 transition-colors ${isSelected ? 'bg-brand/20 border-brand/40 text-brand' : 'bg-panel border-line text-white group-hover:bg-raised'}`}>
-                      <Star size={12} className={isSelected ? 'fill-brand text-brand' : ''} />
-                      {t.name}
-                    </div>
-                  </button>
-                )
-              })}
-              
-              {filteredIndex.length === 0 && !error && (
-                <div className="col-span-full text-center text-fg-2 py-12">
-                  No templates found matching your search.
-                </div>
-              )}
-            </div>
+                      <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${isSelected ? 'border-brand/40 bg-brand/20 text-brand' : 'border-line bg-panel text-fg group-hover:bg-raised'}`}>
+                        <Star size={12} className={isSelected ? 'fill-brand text-brand' : ''} aria-hidden="true" />
+                        {t.name}
+                      </div>
+                    </button>
+                  )
+                })}
+
+                {filteredIndex.length === 0 && !error && (
+                  <div className="col-span-full py-12 text-center text-fg-2">
+                    No templates found matching your search.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Right Pane (Details) */}
-          <div className="w-[280px] flex flex-col shrink-0">
+          <div className="flex w-full shrink-0 flex-col overflow-y-auto pr-1 md:w-[280px]">
             {!selected ? (
-              <div className="flex flex-col items-center text-center mt-12 gap-4">
-                <Layers size={64} className="text-fg-3" />
-                <h3 className="text-white font-medium text-lg">Select a template to get started</h3>
-                <p className="text-sm text-fg-2 leading-relaxed">
+              <div className="mt-6 flex flex-col items-center gap-4 text-center">
+                <Layers size={64} className="text-fg-3" aria-hidden="true" />
+                <h3 className="text-lg font-medium text-fg">Select a template to get started</h3>
+                <p className="text-sm leading-relaxed text-fg-2">
                   Choose a template to kick off your project. You can change everything later!
                 </p>
-                <p className="text-sm text-fg-2 leading-relaxed mt-4">
-                  You can also browse all available templates on <a href="#" className="text-brand hover:underline">Typst Universe</a> to get inspired.
+                <p className="mt-4 text-sm leading-relaxed text-fg-2">
+                  You can also browse all available templates on{' '}
+                  <a href="https://typst.app/universe/" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">Typst Universe</a>{' '}
+                  to get inspired.
                 </p>
               </div>
             ) : (
-              <div className="flex flex-col gap-4 overflow-y-auto pr-2 pb-4">
-                <h3 className="text-white font-semibold text-lg">{meta?.name ?? selected.name}</h3>
-                
-                {selected.author && (
-                  <p className="text-sm text-fg-2">By {selected.author}</p>
+              <div className="flex flex-col gap-4 pb-4">
+                <h3 className="text-lg font-semibold text-fg">{meta?.name ?? selected.name}</h3>
+
+                {selected.author && <p className="text-sm text-fg-2">By {selected.author}</p>}
+
+                <p className="text-sm leading-relaxed text-fg-2">{meta?.description ?? selected.description}</p>
+
+                {metaLoading && (
+                  <p role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-fg-3">
+                    <Loader2 size={13} className="animate-spin" aria-hidden="true" /> Loading options…
+                  </p>
                 )}
-                
-                <p className="text-sm text-fg-2 leading-relaxed">
-                  {meta?.description ?? selected.description}
-                </p>
 
                 {meta && meta.variables.length > 0 && (
                   <div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
-                    <h4 className="text-sm font-medium text-white">Template Variables</h4>
+                    <h4 className="text-sm font-medium text-fg">Template variables</h4>
                     {meta.variables.map((v) => (
                       <label key={v.id} className="flex flex-col gap-1.5 text-xs font-medium text-fg-2">
-                        {v.id.toUpperCase()}
+                        {humanize(v.id)}
                         <input
-                          className="rounded border border-line bg-panel px-2.5 py-2 text-sm text-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all"
+                          name={v.id}
+                          className="rounded border border-line bg-panel px-2.5 py-2 text-sm text-fg outline-none transition-all focus:border-brand focus:ring-1 focus:ring-brand"
                           value={values[v.id] ?? ''}
                           onChange={(e) => setValues({ ...values, [v.id]: e.target.value })}
                         />
@@ -200,22 +239,20 @@ export function TemplateDialog({ onClose, onCreate }: Props) {
                     ))}
                   </div>
                 )}
-                
-                {error && <div className="text-danger text-sm mt-2">{error}</div>}
+
+                {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
               </div>
             )}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-line p-4 flex justify-end shrink-0 bg-panel/50">
+        <div className="flex shrink-0 justify-end border-t border-line bg-panel/50 p-4">
           <button
             disabled={!selected || creating}
             onClick={handleCreate}
-            className="text-white font-medium px-6 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-            style={{ backgroundColor: !selected ? 'var(--bg-raised)' : 'var(--accent-fill)' }}
+            className="flex items-center gap-2 rounded-md bg-accent-fill px-6 py-2 font-medium text-white transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-3 disabled:hover:brightness-100"
           >
-            {creating && <Loader2 size={16} className="animate-spin" />}
+            {creating && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
             Create
           </button>
         </div>

@@ -126,5 +126,13 @@ input, textarea, [contenteditable] { caret-color: var(--accent-text); }
 .tnum { font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  /* Drop movement, keep instant state feedback (color/opacity) so hover,
+     focus, and selection changes are still perceivable. */
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-property: color, background-color, border-color, outline-color, opacity, fill, stroke, box-shadow !important;
+    transition-duration: .01ms !important;
+  }
 }

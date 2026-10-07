@@ -8,15 +8,42 @@ export type { LocalPackageCtx }
 export class Project {
   private vp: TypstProject | null = null
   private seq = 0
+  private queue: Promise<void> = Promise.resolve()
+  private initPromise: Promise<void> | null = null
+  private initKey = 0
 
+  /** Idempotent: concurrent calls share one initialization; a re-init disposes the previous engine first. */
   async init(fonts: ArrayBuffer[]): Promise<void> {
-    this.vp = await TypstProject.create()
-    for (const f of fonts) await this.vp.addFont(new Uint8Array(f))
+    if (this.initPromise) return this.initPromise
+    const key = ++this.initKey
+    this.initPromise = (async () => {
+      try {
+        this.vp?.destroy()
+        this.vp = null
+        const vp = await TypstProject.create()
+        if (key !== this.initKey) {
+          vp.destroy()
+          return
+        }
+        for (const f of fonts) await vp.addFont(new Uint8Array(f))
+        this.vp = vp
+      } finally {
+        this.initPromise = null
+      }
+    })()
+    return this.initPromise
   }
 
   getEngine(): TypstProject | null {
     return this.vp
   }
+
+  /** True when a compile is queued or running. */
+  get busy(): boolean {
+    return this.pending > 0
+  }
+
+  private pending = 0
 
   setEntry(path: string): void {
     if (this.vp) this.vp.entry = path
@@ -42,17 +69,28 @@ export class Project {
 
   async compileProject(files: ProjectFile[], ctx?: LocalPackageCtx): Promise<CompileResult | null> {
     const mySeq = ++this.seq
-    await this.syncFiles(files)
-    if (ctx) {
+    this.pending++
+    // Serialize compiles: concurrent calls must not interleave syncFiles() on the shared engine.
+    const run = this.queue.then(async () => {
       try {
-        await injectLocalPackages(this.vp!, ctx, files)
-      } catch (err) {
-        console.warn('[headspot] @local package resolution failed', err)
+        if (!this.vp || mySeq !== this.seq) return null
+        await this.syncFiles(files)
+        if (ctx) {
+          try {
+            await injectLocalPackages(this.vp, ctx, files)
+          } catch (err) {
+            console.warn('[headspot] @local package resolution failed', err)
+          }
+        }
+        const res = await this.vp.compile()
+        if (mySeq !== this.seq) return null
+        return res
+      } finally {
+        this.pending--
       }
-    }
-    const res = await this.vp!.compile()
-    if (mySeq !== this.seq) return null
-    return res
+    })
+    this.queue = run.then(() => undefined, () => undefined)
+    return run
   }
 
   async renderPage(index: number): Promise<string | undefined> {
@@ -71,6 +109,8 @@ export class Project {
   }
 
   async dispose() {
+    this.seq++
+    await this.queue.catch(() => undefined)
     this.vp?.destroy()
     this.vp = null
   }

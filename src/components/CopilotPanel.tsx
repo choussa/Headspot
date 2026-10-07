@@ -33,6 +33,7 @@ export function CopilotPanel({ onInsert, getSelection }: { onInsert: (code: stri
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const send = async () => {
     const prompt = input.trim()
@@ -45,7 +46,7 @@ export function CopilotPanel({ onInsert, getSelection }: { onInsert: (code: stri
       const answer = await askAi(config, prompt, history)
       setHistory([...next, { role: 'assistant', content: answer }])
     } catch (e) {
-      setHistory([...next, { role: 'assistant', content: e instanceof Error ? e.message : 'AI request failed' }])
+      setHistory([...next, { role: 'assistant', content: `Error: ${e instanceof Error ? e.message : 'AI request failed'}. Check the API key and base URL in Settings.` }])
     } finally {
       setBusy(false)
     }
@@ -53,20 +54,23 @@ export function CopilotPanel({ onInsert, getSelection }: { onInsert: (code: stri
 
   return (
     <div className="file-panel">
-      <div className="h-full flex flex-col text-sm" style={{ background: 'var(--panel-bg)' }}>
+      <div className="h-full flex flex-col text-sm bg-panel">
         <div className="file-panel-header flex items-center justify-between">
           <span>Copilot</span>
-          <button className="text-xs text-fg-3" onClick={() => setShowSettings((v) => !v)}>settings</button>
+          <button className="text-xs text-fg-3 hover:text-fg" aria-expanded={showSettings} aria-controls="copilot-settings" onClick={() => setShowSettings((v) => !v)}>Settings</button>
         </div>
         {showSettings && (
-          <div className="p-2 flex flex-col gap-2 border-b border-line text-xs">
-            <input className="file-input rounded px-2 py-1" placeholder="Base URL" value={config.baseUrl} onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })} />
-            <input className="file-input rounded px-2 py-1" placeholder="Model" value={config.model} onChange={(e) => setConfig({ ...config, model: e.target.value })} />
-            <input className="file-input rounded px-2 py-1" placeholder="API key" type="password" value={config.apiKey} onChange={(e) => setConfig({ ...config, apiKey: e.target.value })} />
-            <button className="rounded border border-line px-2 py-1" onClick={() => localStorage.setItem(KEY, JSON.stringify(config))}>Save</button>
+          <div id="copilot-settings" className="p-2 flex flex-col gap-2 border-b border-line text-xs">
+            <input aria-label="API base URL" className="file-input rounded px-2 py-1" placeholder="Base URL" value={config.baseUrl} onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })} />
+            <input aria-label="Model" className="file-input rounded px-2 py-1" placeholder="Model" value={config.model} onChange={(e) => setConfig({ ...config, model: e.target.value })} />
+            <input aria-label="API key" className="file-input rounded px-2 py-1" placeholder="API key" type="password" autoComplete="off" value={config.apiKey} onChange={(e) => setConfig({ ...config, apiKey: e.target.value })} />
+            <div className="flex items-center gap-2">
+              <button className="rounded border border-line px-2 py-1" onClick={() => { localStorage.setItem(KEY, JSON.stringify(config)); setSaved(true); window.setTimeout(() => setSaved(false), 1500) }}>Save</button>
+              <span role="status" aria-live="polite" className="text-fg-3">{saved ? 'Saved' : ''}</span>
+            </div>
           </div>
         )}
-        <div className="flex-1 overflow-auto p-2 flex flex-col gap-3">
+        <div className="flex-1 overflow-auto p-2 flex flex-col gap-3" aria-busy={busy} aria-live="polite">
           {history.length === 0 && <p className="text-xs text-fg-3">Ask anything about Typst, e.g. &quot;How do I create a 3-column table with a blue header?&quot;</p>}
           {history.map((m, i) => (
             <div key={i} className={`text-xs ${m.role === 'user' ? 'text-fg' : 'text-fg-2'}`}>
@@ -91,24 +95,26 @@ export function CopilotPanel({ onInsert, getSelection }: { onInsert: (code: stri
                   const answer = await askAi(config, prompt, history)
                   setHistory([...next, { role: 'assistant', content: answer }])
                 } catch (e) {
-                  setHistory([...next, { role: 'assistant', content: e instanceof Error ? e.message : 'AI request failed' }])
+                  setHistory([...next, { role: 'assistant', content: `Error: ${e instanceof Error ? e.message : 'AI request failed'}. Check the API key and base URL in Settings.` }])
                 } finally {
                   setBusy(false)
                 }
               }}
             >
-              Fix my math
+              Fix selected math
             </button>
           )}
           <div className="flex gap-1">
           <input
             className="file-input flex-1 rounded px-2 py-1 text-xs"
             placeholder="Ask Copilot…"
+            aria-label="Ask Copilot"
             value={input}
+            disabled={busy}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
           />
-          <button className="rounded border border-line px-2 py-1 text-xs" disabled={busy} onClick={() => void send()}>{busy ? '…' : 'Send'}</button>
+          <button className="rounded border border-line px-2 py-1 text-xs disabled:opacity-50" disabled={busy || !input.trim()} onClick={() => void send()}>{busy ? '…' : 'Send'}</button>
           </div>
         </div>
       </div>

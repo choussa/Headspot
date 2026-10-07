@@ -60,6 +60,7 @@ export function TomlPackageForm({ text, sourceFiles, onChange }: Props) {
 
   const nameOk = NAME_RE.test(cfg.name)
   const verOk = VERSION_RE.test(cfg.version)
+  const malformed = text.trim().length > 0 && parseTomlConfig(text) === null
 
   const pending = useRef<PackageConfig | null>(null)
   const onChangeRef = useRef(onChange)
@@ -91,9 +92,15 @@ export function TomlPackageForm({ text, sourceFiles, onChange }: Props) {
           <span className="text-xs text-fg-3">typst.toml</span>
         </div>
 
+        {malformed && (
+          <p role="alert" className="rounded border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+            Could not parse typst.toml. Switch to code view to fix the syntax; edits here will overwrite the file.
+          </p>
+        )}
+
         <Field
           label="Package name"
-          hint={!nameOk && cfg.name ? <span className="text-danger text-[11px]">lowercase letters, digits, dashes</span> : undefined}
+          hint={!nameOk ? <span className="text-danger text-[11px]">lowercase letters, digits, dashes</span> : undefined}
         >
           <input className={inputCls} value={cfg.name} onChange={(e) => apply({ ...cfg, name: e.target.value })} spellCheck={false} placeholder="my-package" />
         </Field>
@@ -129,7 +136,7 @@ export function TomlPackageForm({ text, sourceFiles, onChange }: Props) {
         <label className="flex items-center gap-2 text-fg">
           <input
             type="checkbox"
-            className="w-4 h-4 rounded border-line bg-panel accent-blue-500"
+            className="w-4 h-4 rounded border-line bg-panel accent-accent-fill"
             checked={cfg.isTemplate}
             onChange={(e) => apply({ ...cfg, isTemplate: e.target.checked })}
           />

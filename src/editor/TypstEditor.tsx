@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { minimalSetup } from 'codemirror'
-import { EditorView, lineNumbers } from '@codemirror/view'
-import { Compartment, EditorState } from '@codemirror/state'
+import { EditorView, lineNumbers, keymap } from '@codemirror/view'
+import { Compartment, EditorState, Prec, Transaction } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import {
   typstHighlighting,
@@ -16,6 +16,7 @@ import {
 import { autocompletion } from '@codemirror/autocomplete'
 import { lintGutter } from '@codemirror/lint'
 import { search } from '@codemirror/search'
+import { indentMore, indentLess } from '@codemirror/commands'
 import { vim } from '@replit/codemirror-vim'
 import { pushDiagnostics } from './diagnostics'
 import type { Diagnostic, TypstProject } from '@vedivad/typst-web-service'
@@ -40,19 +41,26 @@ interface Props {
   spellcheck?: boolean
   externalViewRef?: MutableRefObject<EditorView | null>
   onCursor?: (offset: number) => void
+  onFind?: () => void
   collab?: CollabSession | null
   commentRanges?: { from: number; to: number }[]
 }
 
-export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, vimMode = false, writingDirection = 'ltr', spellcheck = false, externalViewRef, onCursor, collab, commentRanges }: Props) {
+export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wrapLines = true, showLineNumbers = true, fontSize = 15, fontFamily = '"Cascadia Mono", monospace', dark = true, vimMode = false, writingDirection = 'ltr', spellcheck = false, externalViewRef, onCursor, onFind, collab, commentRanges }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const projectRef = useRef<TypstProject | null>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const pathRef = useRef(activePath)
+  pathRef.current = activePath
   const onCursorRef = useRef(onCursor)
   onCursorRef.current = onCursor
+  const onFindRef = useRef(onFind)
+  onFindRef.current = onFind
   const pathCompartment = useRef(new Compartment())
+  const cursorsRef = useRef(new Map<string, { anchor: number; head: number }>())
+  const lastPathRef = useRef<string | null>(null)
   const wrapCompartment = useRef(new Compartment())
   const gutterCompartment = useRef(new Compartment())
   const fontCompartment = useRef(new Compartment())
@@ -95,15 +103,27 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
             createTypstCompileSync({ project }),
             createTypstHover({ project }),
             autocompletion({ override: [typstCompletionSource({ project })] }),
+            // minimalSetup already provides closeBrackets(); Tab indents a selection
+            // and otherwise lets focus move on to the next control.
+            keymap.of([
+              { key: 'Tab', run: (v) => (v.state.selection.main.empty ? false : indentMore(v)) },
+              { key: 'Shift-Tab', run: (v) => (v.state.selection.main.empty ? false : indentLess(v)) },
+            ]),
+            // Our own Find & Replace widget owns Mod-f, so the default search panel never opens.
+            Prec.highest(keymap.of([
+              { key: 'Mod-f', run: () => { onFindRef.current?.(); return true } },
+            ])),
             lintGutter(),
-            search(),
+            search({ top: true }),
             EditorView.updateListener.of((u) => {
               if (u.docChanged) {
                 window.clearTimeout(timer)
                 timer = window.setTimeout(() => onChangeRef.current(u.state.doc.toString()), 150)
               }
               if (u.selectionSet) {
-                onCursorRef.current?.(u.state.selection.main.head)
+                const sel = u.state.selection.main
+                cursorsRef.current.set(pathRef.current, { anchor: sel.anchor, head: sel.head })
+                onCursorRef.current?.(sel.head)
               }
             }),
           ],
@@ -124,16 +144,25 @@ export function TypstEditor({ engine, doc, activePath, onChange, diagnostics, wr
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
+    const pathChanged = lastPathRef.current !== activePath
+    lastPathRef.current = activePath
     const activeCollab = collab && collab.path === activePath ? collab : null
-    if (activeCollab) {
-      const text = activeCollab.ytext.toString()
-      if (view.state.doc.toString() !== text) {
-        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
-      }
-    } else if (view.state.doc.toString() !== doc) {
-      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: doc } })
+    const target = activeCollab ? activeCollab.ytext.toString() : doc
+    // Restore the stored cursor only on a file switch — never mid-typing/composition.
+    const saved = pathChanged ? cursorsRef.current.get(activePath) : undefined
+    const clamp = (n: number, len: number) => Math.max(0, Math.min(n, len))
+    if (view.state.doc.toString() !== target) {
+      const len = target.length
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: target },
+        annotations: Transaction.addToHistory.of(false),
+        ...(saved ? { selection: { anchor: clamp(saved.anchor, len), head: clamp(saved.head, len) } } : {}),
+      })
+    } else if (saved) {
+      const len = view.state.doc.length
+      view.dispatch({ selection: { anchor: clamp(saved.anchor, len), head: clamp(saved.head, len) } })
     }
-    projectRef.current?.setText(activePath, activeCollab ? activeCollab.ytext.toString() : doc)
+    projectRef.current?.setText(activePath, target)
     viewRef.current?.dispatch({ effects: pathCompartment.current.reconfigure(typstFilePath.of(activePath)) })
   }, [doc, activePath, collab])
 

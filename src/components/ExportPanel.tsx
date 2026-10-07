@@ -40,7 +40,7 @@ export function ExportPanel({ onExportPdf, onExportSources, onExportSvg, onExpor
             </p>
             <p className="tnum text-xs text-fg-3">
               {pageCount === 0
-                ? 'Fix the errors to enable document export'
+                ? 'Compile the document to enable export'
                 : `Documents over one page download as a zip · ${fileCount} file${fileCount === 1 ? '' : 's'} in this project`}
             </p>
           </div>

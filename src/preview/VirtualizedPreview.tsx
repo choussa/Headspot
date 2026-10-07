@@ -12,9 +12,11 @@ interface Props {
   engine?: TypstProject | null
   navRef?: MutableRefObject<PreviewNavigator | null>
   onSourceJump?: (file: string, line: number, column: number) => void
+  compiling?: boolean
+  hasErrors?: boolean
 }
 
-export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, onZoomChange, engine, navRef, onSourceJump }: Props) {
+export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, onZoomChange, engine, navRef, onSourceJump, compiling = false, hasErrors = false }: Props) {
   const [visible, setVisible] = useState<Set<number>>(new Set())
   const [observer, setObserver] = useState<IntersectionObserver | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -112,6 +114,8 @@ export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, 
   return (
     <div
       ref={containerRef}
+      role="region"
+      aria-label="Document preview"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -119,7 +123,11 @@ export function VirtualizedPreview({ pages, compileSeq, renderPage, zoom = 100, 
       style={{ touchAction: 'pan-x pan-y' }}
     >
       <div className="preview-page-layer">
-      {pages.length === 0 && <p className="mt-8 text-center text-sm text-fg-2">No pages yet — compile to preview.</p>}
+      {pages.length === 0 && (
+        <p role="status" aria-live="polite" className="mt-8 text-center text-sm text-fg-2">
+          {compiling ? 'Compiling…' : hasErrors ? 'Fix the errors to see a preview.' : 'No pages yet — compile to preview.'}
+        </p>
+      )}
       {pages.map((p, i) => (
         <PagePlaceholder
           key={i}

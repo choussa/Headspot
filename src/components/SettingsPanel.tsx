@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { AlignLeft, AlignRight } from 'lucide-react'
 import type { Preferences } from '../state/preferences'
 import type { ProjectRecord } from '../state/workspace'
@@ -19,12 +19,15 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
   const [gh, setGh] = useState(loadGithubConfig)
   const [ghBusy, setGhBusy] = useState(false)
   const [ghStatus, setGhStatus] = useState<string | null>(null)
+  const [ghError, setGhError] = useState<string | null>(null)
+  const fontFamilyId = useId()
+  const dictionaryId = useId()
   useEffect(() => {
     void listFolders().then(setFolders)
   }, [])
   const sourceFiles = (record?.files ?? []).filter((f) => f.kind === 'source')
   return (
-    <div className="w-[320px] h-full bg-panel border-r border-line flex flex-col shrink-0">
+    <div className="side-panel h-full bg-panel border-r border-line flex flex-col shrink-0">
       <div className="px-5 py-4 font-semibold text-fg border-b border-line">Settings</div>
       <div className="p-5 flex flex-col gap-8 overflow-y-auto text-[13px] flex-1">
         <section>
@@ -98,9 +101,11 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
               <span className="text-fg-2">Font size in the editor</span>
               <input
                 type="number"
+                min={8}
+                max={32}
                 className="bg-app border border-line rounded px-2.5 py-1.5 w-16 text-right text-fg outline-none focus:border-accent-fill"
                 value={prefs.fontSize}
-                onChange={(e) => update('fontSize', Number(e.target.value) || 15)}
+                onChange={(e) => update('fontSize', Math.min(32, Math.max(8, Number(e.target.value) || 15)))}
               />
             </label>
             
@@ -141,8 +146,9 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
             </label>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-fg-2">Font family in the editor</label>
+              <label htmlFor={fontFamilyId} className="text-fg-2">Font family in the editor</label>
               <input
+                id={fontFamilyId}
                 type="text"
                 className="bg-app border border-line rounded px-2.5 py-1.5 w-full text-fg outline-none focus:border-accent-fill"
                 value={prefs.fontFamily}
@@ -166,8 +172,9 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
             </label>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-fg-2">Personal dictionary (one word per line)</label>
+              <label htmlFor={dictionaryId} className="text-fg-2">Personal dictionary (one word per line)</label>
               <textarea
+                id={dictionaryId}
                 className="bg-app border border-line rounded px-2.5 py-1.5 w-full text-fg outline-none focus:border-accent-fill"
                 rows={3}
                 value={prefs.personalDictionary}
@@ -177,7 +184,7 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
 
             <label className="flex items-start justify-between cursor-pointer group">
               <div className="flex flex-col">
-                <span className="text-fg-2 group-hover:text-fg transition-colors">Enable Vim Mode</span>
+                <span className="text-fg-2 group-hover:text-fg transition-colors">Vim mode</span>
                 <span className="text-[11px] text-fg-3 mt-0.5">Applies keybindings as known from Vim.</span>
               </div>
               <input
@@ -193,23 +200,24 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
         <section>
           <h3 className="text-fg font-semibold mb-4 text-[14px]">Version control</h3>
           <div className="flex flex-col gap-3 text-xs">
-            <input className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="GitHub token" type="password" value={gh.token} onChange={(e) => setGh({ ...gh, token: e.target.value })} />
-            <input className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="owner/repo" value={gh.repo} onChange={(e) => setGh({ ...gh, repo: e.target.value })} />
-            <input className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="branch (main)" value={gh.branch} onChange={(e) => setGh({ ...gh, branch: e.target.value })} />
+            <input aria-label="GitHub token" className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="GitHub token" type="password" autoComplete="off" value={gh.token} onChange={(e) => setGh({ ...gh, token: e.target.value })} />
+            <input aria-label="GitHub repository (owner/repo)" className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="owner/repo" value={gh.repo} onChange={(e) => setGh({ ...gh, repo: e.target.value })} />
+            <input aria-label="GitHub branch" className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="branch (main)" value={gh.branch} onChange={(e) => setGh({ ...gh, branch: e.target.value })} />
             <button
               type="button"
-              className="rounded border border-line px-3 py-1.5 text-fg-2 hover:text-fg disabled:opacity-50"
+              className="rounded border border-line px-3 py-1.5 text-fg-2 hover:text-fg disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={ghBusy || !record}
               onClick={async () => {
                 if (!record) return
                 setGhBusy(true)
                 setGhStatus(null)
+                setGhError(null)
                 try {
                   saveGithubConfig(gh)
                   await pushToGitHub(gh, record.files.filter((f) => f.kind === 'source').map((f) => ({ path: f.path, text: f.text ?? '' })), `Update ${record.meta.name}`)
                   setGhStatus('Pushed to GitHub')
                 } catch (e) {
-                  setGhStatus(e instanceof Error ? e.message : 'Push failed')
+                  setGhError(e instanceof Error ? e.message : 'Push failed. Check the repository, branch, and token permissions.')
                 } finally {
                   setGhBusy(false)
                 }
@@ -217,14 +225,16 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
             >
               {ghBusy ? 'Pushing…' : 'Push to GitHub'}
             </button>
-            {ghStatus && <p className="text-fg-3">{ghStatus}</p>}
+            {!record && <p className="text-fg-3">Open a project to push.</p>}
+            {ghStatus && <p role="status" aria-live="polite" className="text-fg-3">{ghStatus}</p>}
+            {ghError && <p role="alert" className="text-danger">{ghError}</p>}
           </div>
         </section>
 
         <div className="mt-2">
           <button
             type="button"
-            className="w-full rounded border border-danger text-danger hover:bg-danger hover:text-white transition-colors px-4 py-2 font-medium"
+            className="w-full rounded border border-danger text-danger hover:bg-danger-fill hover:text-white transition-colors px-4 py-2 font-medium"
             onClick={onRequestDelete}
           >
             Delete project

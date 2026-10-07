@@ -8,7 +8,14 @@ import { startOfflineSync } from './storage/offlineQueue'
 import { saveProject } from './storage/cloudStore'
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+  } else {
+    // A service worker in dev serves stale cached modules and breaks HMR.
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((reg) => { void reg.unregister() })
+    }).catch(() => {})
+  }
 }
 startOfflineSync(saveProject)
 

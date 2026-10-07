@@ -8,6 +8,11 @@ export interface Snapshot {
 const KEY = (id: string) => `typst:history:${id}`
 const MAX = 20
 
+/** Cheap fingerprint of all source text — used to skip snapshots that changed nothing. */
+function fingerprint(files: ProjectFile[]): string {
+  return files.map((f) => (f.kind === 'source' ? `${f.path}\u0000${f.text ?? ''}` : `${f.path}\u0000A`)).join('\n')
+}
+
 export function listSnapshots(projectId: string): Snapshot[] {
   try {
     const raw = localStorage.getItem(KEY(projectId))
@@ -28,13 +33,19 @@ export function listSnapshots(projectId: string): Snapshot[] {
 export function takeSnapshot(projectId: string, files: ProjectFile[]): void {
   try {
     const snaps = listSnapshots(projectId)
-    snaps.unshift({ ts: Date.now(), files: JSON.parse(JSON.stringify(files, (_k, v) => v instanceof Uint8Array ? Array.from(v) : v)) })
+    const fp = fingerprint(files)
+    const prevFp = snaps[0] ? fingerprint(snaps[0].files) : null
+    if (prevFp === fp) return // nothing changed since the last snapshot
+    // Store source text only; asset bytes are restored from the live record on restore.
+    const lean = files.map((f) => (f.kind === 'asset' ? { path: f.path, kind: f.kind } : f))
+    snaps.unshift({ ts: Date.now(), files: JSON.parse(JSON.stringify(lean)) })
     localStorage.setItem(KEY(projectId), JSON.stringify(snaps.slice(0, MAX)))
   } catch {
     // storage full — drop oldest
     try {
       const snaps = listSnapshots(projectId).slice(0, MAX - 5)
-      snaps.unshift({ ts: Date.now(), files: JSON.parse(JSON.stringify(files)) })
+      const lean = files.map((f) => (f.kind === 'asset' ? { path: f.path, kind: f.kind } : f))
+      snaps.unshift({ ts: Date.now(), files: JSON.parse(JSON.stringify(lean)) })
       localStorage.setItem(KEY(projectId), JSON.stringify(snaps))
     } catch { /* ignore */ }
   }

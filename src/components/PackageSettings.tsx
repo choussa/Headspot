@@ -87,7 +87,7 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
   const nameReleases = releases.filter((r) => r.name === cfg.name)
 
   return (
-    <div className="fixed inset-0 z-50 bg-body text-sm flex flex-col text-fg" role="dialog" aria-label="Package and template settings">
+    <div className="fixed inset-0 z-50 bg-app text-sm flex flex-col text-fg" role="dialog" aria-modal="true" aria-label="Package and template settings">
       <div className="border-b border-line px-4 py-2 flex items-center justify-between bg-topbar shrink-0">
         <div className="flex items-center gap-2 font-medium">
           <Package size={15} className="text-fg-2" />
@@ -100,9 +100,10 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
             </span>
           )}
           <button
-            className="bg-panel border border-line px-3 py-1.5 rounded hover:bg-raised disabled:opacity-50"
+            className="bg-panel border border-line px-3 py-1.5 rounded hover:bg-raised disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => void doPublish()}
             disabled={!nameOk || !verOk || !ownerId || status.kind === 'busy'}
+            title={!ownerId ? 'Sign in to publish packages' : !nameOk ? 'Fix the package name to publish' : !verOk ? 'Fix the version to publish' : undefined}
           >
             {status.kind === 'busy' ? 'Publishing…' : 'Publish'}
           </button>
@@ -112,8 +113,8 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
         </div>
       </div>
 
-      <div className="flex h-full min-h-0">
-        <section className="w-1/2 p-6 border-r border-line flex flex-col gap-5 overflow-y-auto">
+      <div className="flex flex-col md:flex-row h-full min-h-0">
+        <section className="w-full md:w-1/2 p-6 border-b md:border-b-0 md:border-r border-line flex flex-col gap-5 overflow-y-auto">
           <div>
             <h3 className="text-fg font-semibold mb-1">About your package</h3>
             <p className="text-xs text-fg-3">Publish this project as a private package or template. Collaborators import it with <code className="text-fg-2">@local/{cfg.name || 'name'}:{cfg.version || '0.0.0'}</code>.</p>
@@ -123,14 +124,14 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
             label="Package name"
             hint={!nameOk ? <span className="text-danger text-[11px]">lowercase letters, digits, dashes</span> : undefined}
           >
-            <input className={inputCls} value={cfg.name} onChange={(e) => apply({ ...cfg, name: e.target.value })} spellCheck={false} />
+            <input className={inputCls} value={cfg.name} aria-invalid={!nameOk} onChange={(e) => apply({ ...cfg, name: e.target.value })} spellCheck={false} />
           </Field>
 
           <Field
             label="Version"
             hint={!verOk ? <span className="text-danger text-[11px]">semver, e.g. 0.1.0</span> : undefined}
           >
-            <input className={inputCls} value={cfg.version} onChange={(e) => apply({ ...cfg, version: e.target.value })} spellCheck={false} />
+            <input className={inputCls} value={cfg.version} aria-invalid={!verOk} onChange={(e) => apply({ ...cfg, version: e.target.value })} spellCheck={false} />
           </Field>
 
           <Field label="Description">
@@ -156,7 +157,7 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
           <label className="flex items-center gap-2 text-fg">
             <input
               type="checkbox"
-              className="w-4 h-4 rounded border-line bg-panel accent-blue-500"
+              className="w-4 h-4 rounded border-line bg-panel accent-accent-fill"
               checked={cfg.isTemplate}
               onChange={(e) => apply({ ...cfg, isTemplate: e.target.checked })}
             />
@@ -191,7 +192,7 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
                   <button
                     key={r.id}
                     onClick={() => apply({ ...cfg, name: r.name, version: r.version, description: r.description, entrypoint: r.entrypoint, isTemplate: r.isTemplate })}
-                    className={`flex items-center justify-between p-3 border -mb-px first:rounded-t-md last:rounded-b-md text-left ${selected ? 'bg-blue-500/10 border-blue-500/50 relative z-10' : 'bg-panel border-line hover:bg-raised'}`}
+                    className={`flex items-center justify-between p-3 border -mb-px first:rounded-t-md last:rounded-b-md text-left ${selected ? 'bg-accent-fill/10 border-accent-fill/50 relative z-10' : 'bg-panel border-line hover:bg-raised'}`}
                   >
                     <span className="flex items-center gap-2">
                       {r.isTemplate ? <Layers size={14} className="text-fg-2" /> : <Package size={14} className="text-fg-2" />}
@@ -206,7 +207,7 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
           </div>
         </section>
 
-        <section className="w-1/2 p-6 flex flex-col gap-4 bg-panel/50 overflow-y-auto">
+        <section className="w-full md:w-1/2 p-6 flex flex-col gap-4 bg-panel/50 overflow-y-auto">
           <div className="flex items-center justify-between">
             <h3 className="text-fg font-semibold">Releases</h3>
             <span className="text-xs text-fg-3">{nameReleases.length} version{nameReleases.length === 1 ? '' : 's'}</span>

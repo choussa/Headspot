@@ -112,7 +112,7 @@ function Actions({
   confirmLabel, cancelLabel = 'Cancel', destructive, onConfirm, onCancel, disabled,
 }: {
   confirmLabel: string
-  cancelLabel?: string
+  cancelLabel?: string | null
   destructive?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -120,13 +120,15 @@ function Actions({
 }) {
   return (
     <div className="mt-5 flex justify-end gap-2">
-      <button
-        type="button"
-        onClick={onCancel}
-        className="rounded-lg border border-line bg-raised px-3 py-1.5 text-[13px] font-medium text-fg transition-colors hover:bg-line"
-      >
-        {cancelLabel}
-      </button>
+      {cancelLabel !== null && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-line bg-raised px-3 py-1.5 text-[13px] font-medium text-fg transition-colors hover:bg-line"
+        >
+          {cancelLabel}
+        </button>
+      )}
       <button
         type="button"
         onClick={onConfirm}
@@ -220,7 +222,7 @@ export function PromptDialog({
         />
         <Actions
           confirmLabel={readOnly ? 'Done' : confirmLabel}
-          cancelLabel={readOnly ? undefined : cancelLabel}
+          cancelLabel={readOnly ? null : cancelLabel}
           destructive={destructive}
           onConfirm={readOnly ? onCancel : submit}
           onCancel={onCancel}

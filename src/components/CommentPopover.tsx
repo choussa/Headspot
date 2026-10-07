@@ -55,7 +55,7 @@ function ReplyItem({ reply, onSave, onDelete }: {
         <span className="text-fg-2 font-medium ml-2">{relTime(reply.ts)}</span>
         <p className="text-fg whitespace-pre-wrap mt-0.5">{reply.text}</p>
       </div>
-      <div className="flex gap-0.5 shrink-0 opacity-0 group-hover/reply:opacity-100 transition-opacity">
+      <div className="flex gap-0.5 shrink-0 opacity-0 group-hover/reply:opacity-100 group-focus-within/reply:opacity-100 transition-opacity">
         <button className="p-1 text-fg-2 hover:text-fg rounded hover:bg-raised" title="Edit reply" aria-label="Edit reply" onClick={() => setEditing(true)}>
           <Pencil size={11} />
         </button>
@@ -93,6 +93,7 @@ export function CommentPopover({ comment, line, anchor, me, onClose, onCreate, o
       role="dialog"
       aria-label={isThread ? 'Comment thread' : 'New comment'}
       onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
     >
       {isThread && comment ? (
         <div className="flex flex-col min-h-0">
@@ -119,7 +120,7 @@ export function CommentPopover({ comment, line, anchor, me, onClose, onCreate, o
                 <Trash2 size={11} />
               </button>
               <button
-                className="text-fg-2 hover:text-fg cursor-pointer flex items-center gap-1 ml-1"
+                className="text-fg-2 hover:text-fg rounded px-1 flex items-center gap-1 ml-1"
                 title={`Go to line ${line}`}
                 aria-label={`Go to line ${line}`}
                 onClick={() => { onJump(comment.from); onClose() }}
@@ -171,9 +172,6 @@ export function CommentPopover({ comment, line, anchor, me, onClose, onCreate, o
             />
             <button className="p-1 text-fg-2 hover:text-fg rounded hover:bg-raised" title="Send reply" aria-label="Send reply" onClick={submitReply}>
               <Check size={14} />
-            </button>
-            <button className="p-1 text-fg-2 hover:text-danger rounded hover:bg-raised" title="Delete comment" aria-label="Delete comment" onClick={() => { onDelete(comment.id); onClose() }}>
-              <Trash2 size={14} />
             </button>
           </div>
         </div>

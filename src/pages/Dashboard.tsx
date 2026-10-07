@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus, Cloud, MoreVertical, LayoutGrid, List, FileText, Folder, ChevronRight,
   Loader2, TriangleAlert, RefreshCw, Monitor, Sun, Moon,
 } from 'lucide-react'
-import { TemplateDialog } from '../components/TemplateDialog'
+const TemplateDialog = lazy(() => import('../components/TemplateDialog').then((m) => ({ default: m.TemplateDialog })))
 
 import {
   listProjects, createNewCloudProject, deleteProject,
@@ -52,12 +52,19 @@ function ContextMenu({ x, y, items, close }: {
       <div
         ref={ref}
         role="menu"
+        onKeyDown={(e) => {
+          const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])
+          const i = buttons.indexOf(document.activeElement as HTMLButtonElement)
+          if (e.key === 'ArrowDown') { e.preventDefault(); buttons[Math.min(i + 1, buttons.length - 1)]?.focus() }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); buttons[Math.max(i - 1, 0)]?.focus() }
+        }}
         className="fixed z-50 min-w-[168px] overflow-hidden rounded-lg border border-line bg-panel py-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,.5)]"
       >
         {items.map((item, i) => (
           <button
             key={i}
             role="menuitem"
+            autoFocus={i === 0}
             onClick={() => { item.onClick(); close() }}
             className={`block w-full px-4 py-2 text-left text-[13px] transition-colors hover:bg-rail ${
               item.danger ? 'text-danger hover:bg-danger/10' : 'text-fg-2 hover:text-fg'
@@ -76,7 +83,7 @@ function TileMenu({ onOpen, label }: { onOpen: (e: React.MouseEvent) => void; la
     <button
       onClick={onOpen}
       aria-label={`More actions for ${label}`}
-      className="absolute right-1.5 top-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus-visible:opacity-100 group-hover:opacity-100"
+      className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100"
     >
       <MoreVertical size={14} />
     </button>
@@ -124,7 +131,10 @@ export function Dashboard() {
   const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null))
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setEmail(data.session?.user.email ?? null))
+      .catch(() => setEmail(null))
   }, [])
 
   const load = useCallback(async (showSpinner = true) => {
@@ -229,7 +239,7 @@ export function Dashboard() {
       >
         <button
           onClick={() => setCurrentFolderId(f.id)}
-          className="flex w-full items-center gap-3 rounded-lg border border-line px-3 py-2 text-left transition-colors hover:bg-panel"
+          className="flex w-full items-center gap-3 rounded-lg border border-line px-3 pr-10 py-2 text-left transition-colors hover:bg-panel"
         >
           <Folder size={16} className="shrink-0 text-brand" />
           <span className="flex-1 truncate text-sm text-fg">{f.name}</span>
@@ -259,13 +269,17 @@ export function Dashboard() {
           className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-raised transition-colors hover:border-accent ${TILE_RATIO}`}
         >
           {p.thumbnail ? (
-            <div
-              className="pointer-events-none h-full w-full [&>svg]:h-full [&>svg]:w-full [&>svg]:object-contain"
-              dangerouslySetInnerHTML={{ __html: p.thumbnail }}
-            />
+            p.thumbnail.startsWith('data:') || p.thumbnail.startsWith('http') ? (
+              <img src={p.thumbnail} alt="" loading="lazy" decoding="async" className="pointer-events-none h-full w-full object-contain" />
+            ) : (
+              <div
+                className="pointer-events-none h-full w-full [&>svg]:h-full [&>svg]:w-full [&>svg]:object-contain"
+                dangerouslySetInnerHTML={{ __html: p.thumbnail }}
+              />
+            )
           ) : (
             <>
-              <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-black/[.06] to-transparent" />
+              <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-line/40 to-transparent" />
               <FileText size={18} className="absolute bottom-2 right-2 text-fg-3" />
               <div className="absolute bottom-2 left-3 right-8 truncate text-xs text-fg-3">.typ</div>
             </>
@@ -286,7 +300,7 @@ export function Dashboard() {
       >
         <Link
           to={`/editor/${p.id}`}
-          className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 transition-colors hover:bg-panel"
+          className="flex items-center gap-3 rounded-lg border border-line px-3 pr-10 py-2 transition-colors hover:bg-panel"
         >
           <FileText size={16} className="shrink-0 text-fg-3" />
           <span className="flex-1 truncate text-sm text-fg">{p.name}</span>
@@ -333,10 +347,10 @@ export function Dashboard() {
           <span aria-hidden="true">typst</span>
         </Link>
         <div className="flex items-center gap-3 font-medium text-fg-2">
-          <span className="hidden items-center gap-2 sm:flex">
-            <span className="cloud-dot" aria-hidden="true" />
+          <span role="status" aria-live="polite" className={`hidden items-center gap-2 sm:flex ${error ? 'text-danger' : ''}`}>
+            <span className={`cloud-dot ${error ? 'cloud-dot-error' : ''}`} aria-hidden="true" />
             <Cloud size={14} />
-            Synced
+            {error ? 'Sync error' : 'Synced'}
           </span>
           {ThemeControl}
           <button
@@ -374,7 +388,7 @@ export function Dashboard() {
           onDrop={(e) => onDropToFolder(e, currentFolderId)}
         >
           <h1 className="mb-8 text-3xl font-semibold text-fg">
-            {currentFolderName ?? 'Dashboard'}
+            {currentFolderName ?? 'Projects'}
           </h1>
 
           <div className="mb-10 grid max-w-4xl grid-cols-1 gap-4 md:grid-cols-2">
@@ -548,6 +562,7 @@ export function Dashboard() {
       </div>
 
       {showTemplates && (
+        <Suspense fallback={null}>
         <TemplateDialog
           onClose={() => setShowTemplates(false)}
           onCreate={(name, source) => {
@@ -559,6 +574,7 @@ export function Dashboard() {
             })
           }}
         />
+        </Suspense>
       )}
 
       {menu && (
