@@ -988,6 +988,7 @@ export function EditorPage() {
             {compiling && <><Loader2 size={13} className="animate-spin" aria-hidden="true" /> Compiling…</>}
             {!compiling && ready && diagnostics.length > 0 && <span className="text-danger">{diagnostics.length} problem{diagnostics.length === 1 ? '' : 's'}</span>}
           </span>
+          <div className="w-px h-4 bg-line" aria-hidden="true" />
           <div className="flex items-center bg-panel border border-line rounded-md p-[3px] gap-[2px]">
             <button aria-label="Undo" title="Undo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) undo(v) }}><Undo2 size={15} /></button>
             <button aria-label="Redo" title="Redo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) redo(v) }}><Redo2 size={15} /></button>
@@ -1014,6 +1015,7 @@ export function EditorPage() {
             </button>
           </div>
           
+          <div className="w-px h-4 bg-line" aria-hidden="true" />
           <button
             onClick={onShareLink}
             className="flex items-center h-[26px] px-3 text-[13px] font-medium rounded border border-line bg-panel hover:bg-raised text-fg transition-colors"
@@ -1034,7 +1036,7 @@ export function EditorPage() {
         </div>
       </header>
       <div className="workbench">
-        <aside aria-label="Activity bar" className="activity-rail flex flex-col w-[48px] border-r border-line bg-topbar py-3 items-center gap-3 shrink-0">
+        <aside aria-label="Activity bar" className="activity-rail gap-3">
           <button aria-label="Files" title="Files" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'files' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'files' ? null : 'files')}>
             <Files size={18} />
           </button>
