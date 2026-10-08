@@ -40,7 +40,7 @@
 .menu-root { position: relative; background: var(--panel-raised); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 10px 30px -8px rgba(0,0,0,.45); padding: 4px; min-width: 220px; color: var(--text-primary); font-size: 12px; z-index: 50; }
 /* Header menus are a fixed-width popup overlay so the bar never grows. */
 .menu-anchor { position: relative; }
-.menu-anchor > .menu-root { position: absolute; top: calc(100% + 4px); left: 0; width: 260px; }
+.menu-anchor > .menu-root { position: absolute; top: calc(100% + 4px); left: 0; width: 260px; max-width: 90vw; }
 .menu-row { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 4px; cursor: default; }
 .menu-row:hover, .menu-row-open { background: var(--rail-active); }
 .menu-row-disabled { opacity: .45; }

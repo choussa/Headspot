@@ -43,6 +43,15 @@ export function FindReplace({ viewRef, open, onClose }: Props) {
     })
   }, [find, replace, open, viewRef])
 
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   // Count matches from the editor document (an external system) — done in an
   // effect because refs must not be read during render.
   useEffect(() => {
@@ -76,12 +85,6 @@ export function FindReplace({ viewRef, open, onClose }: Props) {
       role="dialog"
       aria-label="Find and replace"
       className="absolute right-2 top-2 z-30 w-[340px] max-w-[calc(100%-1rem)] rounded-lg border border-line bg-panel shadow-[0_12px_32px_-12px_rgba(0,0,0,.6)]"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onClose()
-        }
-      }}
     >
       <div className="flex items-center gap-1.5 border-b border-line px-2 py-2">
         <input
@@ -142,7 +145,7 @@ export function FindReplace({ viewRef, open, onClose }: Props) {
           onClick={run(replaceAll)}
           className="shrink-0 rounded bg-accent-fill px-2 py-1 text-xs font-semibold text-white transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
         >
-          All
+          Replace all
         </button>
       </div>
     </div>

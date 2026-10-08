@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Zap } from 'lucide-react'
+import { useFocusTrap } from '../lib/useFocusTrap'
 
 export interface Snippet {
   label: string
@@ -60,6 +61,8 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(panelRef, open)
 
   useEffect(() => {
     if (open) {
@@ -75,10 +78,9 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
     return TYPST_SNIPPETS.filter((s) => s.label.toLowerCase().includes(q) || s.insert.toLowerCase().includes(q))
   }, [query])
 
-  useEffect(() => setIndex(0), [query])
-
   if (!open) return null
 
+  const active = matches.length ? Math.min(index, matches.length - 1) : -1
   const commit = (i: number) => {
     const s = matches[i]
     if (!s) return
@@ -90,6 +92,7 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh]">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} aria-hidden="true" />
       <div
+        ref={panelRef}
         className="relative w-full max-w-md rounded-xl border border-line bg-panel shadow-[0_16px_48px_-12px_rgba(0,0,0,.55)] overflow-hidden"
         role="dialog"
         aria-modal="true"
@@ -98,7 +101,7 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
           if (e.key === 'Escape') { e.stopPropagation(); onClose() }
           else if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(i + 1, matches.length - 1)) }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)) }
-          else if (e.key === 'Enter') { e.preventDefault(); commit(index) }
+          else if (e.key === 'Enter') { e.preventDefault(); commit(active) }
         }}
       >
         <div className="flex items-center gap-2 border-b border-line px-3">
@@ -108,7 +111,7 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
             className="w-full bg-transparent py-2.5 text-sm text-fg outline-none placeholder:text-fg-3"
             placeholder="Search snippets…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setIndex(0) }}
             aria-label="Search snippets"
           />
         </div>
@@ -117,7 +120,7 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
           {matches.map((s, i) => (
             <button
               key={s.label}
-              className={`block w-full text-left px-3 py-1.5 text-sm ${i === index ? 'bg-raised text-fg' : 'text-fg-2'}`}
+              className={`block w-full text-left px-3 py-1.5 text-sm ${i === active ? 'bg-raised text-fg' : 'text-fg-2'}`}
               onMouseEnter={() => setIndex(i)}
               onClick={() => commit(i)}
             >
@@ -133,14 +136,23 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
 }
 
 export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(panelRef, open)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full max-w-lg rounded-xl border border-line bg-panel p-5 shadow-[0_16px_48px_-12px_rgba(0,0,0,.55)]" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div ref={panelRef} className="relative w-full max-w-lg rounded-xl border border-line bg-panel p-5 shadow-[0_16px_48px_-12px_rgba(0,0,0,.55)]" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-fg">Keyboard shortcuts</h2>
-          <button className="text-fg-2 hover:text-fg text-xs" onClick={onClose}>Close</button>
+          <button className="text-fg-2 hover:text-fg text-xs" onClick={onClose} aria-label="Close keyboard shortcuts">Close</button>
         </div>
         <div className="divide-y divide-line">
           {SHORTCUTS.map((s) => (

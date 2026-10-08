@@ -344,7 +344,7 @@ export function Dashboard() {
       <header className="flex h-[36px] shrink-0 items-center justify-between border-b border-line bg-topbar px-4 text-[13px]">
         <Link to="/" className="font-bold text-fg">
           <span className="sr-only">Headspot home</span>
-          <span aria-hidden="true">typst</span>
+          <span aria-hidden="true">Head<span className="text-fg-3">spot</span></span>
         </Link>
         <div className="flex items-center gap-3 font-medium text-fg-2">
           <span role="status" aria-live="polite" className={`hidden items-center gap-2 sm:flex ${error ? 'text-danger' : ''}`}>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronsUpDown, Layers, Package, X } from 'lucide-react'
 import type { PackageConfig, ProjectRecord } from '../state/workspace'
 import { listPackageVersions, publishPackage, type PackageVersion } from '../storage/packagePublish'
+import { useFocusTrap } from '../lib/useFocusTrap'
 
 interface Props {
   record: ProjectRecord
@@ -44,6 +45,8 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
   const [releases, setReleases] = useState<PackageVersion[]>([])
   const [status, setStatus] = useState<{ kind: 'idle' | 'busy' | 'done' | 'error'; msg?: string }>({ kind: 'idle' })
   const timer = useRef<number | undefined>(undefined)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(panelRef, true)
 
   const nameOk = NAME_RE.test(cfg.name)
   const verOk = VERSION_RE.test(cfg.version)
@@ -84,10 +87,18 @@ export function PackageSettings({ record, ownerId, onClose, onUpdateConfig }: Pr
     onClose()
   }
 
+  useEffect(() => {
+    panelRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const nameReleases = releases.filter((r) => r.name === cfg.name)
 
   return (
-    <div className="fixed inset-0 z-50 bg-app text-sm flex flex-col text-fg" role="dialog" aria-modal="true" aria-label="Package and template settings">
+    <div ref={panelRef} tabIndex={-1} className="fixed inset-0 z-50 bg-app text-sm flex flex-col text-fg outline-none" role="dialog" aria-modal="true" aria-label="Package and template settings">
       <div className="border-b border-line px-4 py-2 flex items-center justify-between bg-topbar shrink-0">
         <div className="flex items-center gap-2 font-medium">
           <Package size={15} className="text-fg-2" />

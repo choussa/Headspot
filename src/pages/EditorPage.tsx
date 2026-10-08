@@ -953,21 +953,21 @@ export function EditorPage() {
               <ArrowLeft size={16} />
             </button>
             <div className="flex items-center gap-3 text-[13px] font-medium text-fg">
-              <Link to="/" className="hover:text-accent mr-1 no-underline">Typst</Link>
+              <Link to="/" className="hover:text-accent mr-1 no-underline">Head<span className="text-fg-3">spot</span></Link>
               <div className="menu-anchor">
-                <button className="hover:text-accent" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen((v) => !v)}>File</button>
+                <button className="py-1 hover:text-accent" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen((v) => !v)}>File</button>
                 {fileMenuOpen && <Menu items={fileItems} close={() => setFileMenuOpen(false)} />}
               </div>
               <div className="menu-anchor">
-                <button className="hover:text-accent" aria-haspopup="menu" aria-expanded={editMenuOpen} onClick={() => setEditMenuOpen((v) => !v)}>Edit</button>
+                <button className="py-1 hover:text-accent" aria-haspopup="menu" aria-expanded={editMenuOpen} onClick={() => setEditMenuOpen((v) => !v)}>Edit</button>
                 {editMenuOpen && <Menu items={editItems} close={() => setEditMenuOpen(false)} />}
               </div>
               <div className="menu-anchor">
-                <button className="hover:text-accent" aria-haspopup="menu" aria-expanded={viewMenuOpen} onClick={() => setViewMenuOpen((v) => !v)}>View</button>
+                <button className="py-1 hover:text-accent" aria-haspopup="menu" aria-expanded={viewMenuOpen} onClick={() => setViewMenuOpen((v) => !v)}>View</button>
                 {viewMenuOpen && <Menu items={viewItems} close={() => setViewMenuOpen(false)} />}
               </div>
               <div className="menu-anchor">
-                <button className="hover:text-accent" aria-haspopup="menu" aria-expanded={helpMenuOpen} onClick={() => setHelpMenuOpen((v) => !v)}>Help</button>
+                <button className="py-1 hover:text-accent" aria-haspopup="menu" aria-expanded={helpMenuOpen} onClick={() => setHelpMenuOpen((v) => !v)}>Help</button>
                 {helpMenuOpen && <Menu items={helpItems} close={() => setHelpMenuOpen(false)} />}
               </div>
             </div>

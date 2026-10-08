@@ -54,10 +54,10 @@ export function Auth() {
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-app px-4 text-fg">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-8 shadow-[0_24px_64px_-24px_rgba(0,0,0,.55)]">
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-8">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold tracking-tight text-fg">
-            typst<span className="text-fg-3">.saas</span>
+            Head<span className="text-fg-3">spot</span>
           </h1>
           <p className="mt-2 text-sm text-fg-2">Sign in to access your documents</p>
         </div>
@@ -103,7 +103,7 @@ export function Auth() {
               placeholder="At least 6 characters"
               className="w-full rounded-lg border border-control bg-raised px-3 py-2 text-sm text-fg placeholder:text-fg-3"
             />
-            <p id={hintId} className="mt-1 text-[11px] text-fg-3">Minimum 6 characters.</p>
+            <p id={hintId} className="mt-1 text-xs text-fg-3">Minimum 6 characters.</p>
           </div>
 
           {error && (
