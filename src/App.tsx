@@ -12,6 +12,9 @@ import { initializeTheme } from './state/preferences'
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  // Dev-only preview route (e.g. /editor/dev) renders the editor without auth.
+  // `import.meta.env.DEV` is false in production, so this whole branch is stripped.
+  const devPreview = import.meta.env.DEV && window.location.pathname === '/editor/dev'
 
   useEffect(() => {
     initializeTheme()
@@ -29,7 +32,7 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  if (loading) return (
+  if (loading && !devPreview) return (
     <div className="flex h-screen w-screen items-center justify-center gap-2 bg-app text-fg-3">
       <span role="status" aria-live="polite" className="flex items-center gap-2">
         <Loader2 size={16} className="animate-spin" aria-hidden="true" />
@@ -38,7 +41,7 @@ export default function App() {
     </div>
   )
   
-  if (!session) {
+  if (!session && !devPreview) {
     return <Auth />
   }
 

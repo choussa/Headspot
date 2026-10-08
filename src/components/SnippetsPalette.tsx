@@ -125,11 +125,11 @@ export function SnippetsPalette({ open, onClose, onInsert }: {
               onClick={() => commit(i)}
             >
               <span className="font-medium">{s.label}</span>
-              <span className="ml-2 text-[11px] text-fg-3 font-mono truncate">{s.insert.replace(/\n/g, '⏎ ').slice(0, 42)}</span>
+              <span className="ml-2 text-xs text-fg-3 font-mono truncate">{s.insert.replace(/\n/g, '⏎ ').slice(0, 42)}</span>
             </button>
           ))}
         </div>
-        <div className="border-t border-line px-3 py-1.5 text-[11px] text-fg-3">↑↓ to browse · Enter to insert · Esc to close</div>
+        <div className="border-t border-line px-3 py-1.5 text-xs text-fg-3">↑↓ to browse · Enter to insert · Esc to close</div>
       </div>
     </div>
   )
@@ -158,7 +158,7 @@ export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () 
           {SHORTCUTS.map((s) => (
             <div key={s.keys} className="flex items-center justify-between gap-4 py-1.5 text-[13px]">
               <span className="text-fg-2">{s.what}</span>
-              <kbd className="shrink-0 rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[11px] text-fg">{s.keys}</kbd>
+              <kbd className="shrink-0 rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-xs text-fg">{s.keys}</kbd>
             </div>
           ))}
         </div>

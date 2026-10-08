@@ -59,7 +59,7 @@ export function SplitPane({ left, right, vertical = true }: { left: ReactNode; r
 
   return (
     <div ref={containerRef} className={`flex-1 min-w-0 min-h-0 flex ${sideBySide ? 'flex-row' : 'flex-col'}`}>
-      <div style={{ flex: hasRight ? `${pct} 1 0%` : '1 1 0%' }} className="min-w-0 min-h-0 overflow-hidden">{left}</div>
+      <div style={{ flex: hasRight ? `${pct} 1 0%` : '1 1 0%' }} className="min-w-0 min-h-0">{left}</div>
       {hasRight && (
         <div
           className={`split-handle ${stacked ? 'split-handle-horizontal' : 'split-handle-vertical'}`}
@@ -72,9 +72,13 @@ export function SplitPane({ left, right, vertical = true }: { left: ReactNode; r
           aria-valuemax={80}
           onPointerDown={onPointerDown}
           onKeyDown={onHandleKeyDown}
-        />
+        >
+          <span className="split-grip" aria-hidden="true">
+            <i /><i /><i /><i /><i /><i />
+          </span>
+        </div>
       )}
-      {hasRight && <div style={{ flex: `${100 - pct} 1 0%` }} className="min-w-0 min-h-0 overflow-hidden">{right}</div>}
+      {hasRight && <div style={{ flex: `${100 - pct} 1 0%` }} className="min-w-0 min-h-0">{right}</div>}
     </div>
   )
 }

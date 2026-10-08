@@ -28,15 +28,15 @@ export function CommentsPanel({ comments, activePath, currentSelection, onAdd, o
               </div>
               <p className="mt-1 text-fg whitespace-pre-wrap">{c.text}</p>
               <div className="mt-2 flex gap-2">
-                <button className="text-[11px] text-fg-3 hover:text-fg rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" title="Jump to comment" onClick={() => onJump(c.path, c.from)}>Jump</button>
-                <button className="text-[11px] text-fg-3 hover:text-fg rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" aria-pressed={c.resolved} onClick={() => onResolve(c.id)}>{c.resolved ? 'Reopen' : 'Resolve'}</button>
-                <button className="text-[11px] text-danger hover:opacity-80 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-danger" title="Delete comment" onClick={() => onDelete(c.id)}>Delete</button>
+                <button className="text-xs text-fg-3 hover:text-fg rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" title="Jump to comment" onClick={() => onJump(c.path, c.from)}>Jump</button>
+                <button className="text-xs text-fg-3 hover:text-fg rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" aria-pressed={c.resolved} onClick={() => onResolve(c.id)}>{c.resolved ? 'Reopen' : 'Resolve'}</button>
+                <button className="text-xs text-danger hover:opacity-80 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-danger" title="Delete comment" onClick={() => onDelete(c.id)}>Delete</button>
               </div>
             </div>
           ))}
         </div>
         <div className="p-2 border-t border-line flex flex-col gap-2">
-          {currentSelection && <p className="text-[11px] text-fg-3 truncate">On: “{currentSelection}”</p>}
+          {currentSelection && <p className="text-xs text-fg-3 truncate">On: “{currentSelection}”</p>}
           <textarea
             className="file-input rounded px-2 py-1 text-xs max-h-32"
             rows={2}

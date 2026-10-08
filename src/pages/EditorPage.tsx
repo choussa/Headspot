@@ -186,7 +186,9 @@ export function EditorPage() {
   useEffect(() => {
     if (!ready || !id) return
     ;(async () => {
-      const loaded = await loadProject(id)
+      const loaded = import.meta.env.DEV && id === 'dev'
+        ? createProject('Dev Preview', blank)
+        : await loadProject(id)
       if (loaded) {
         setRecord(loaded)
         setActiveFilePath('/main.typ')
@@ -909,13 +911,13 @@ export function EditorPage() {
   return (
     <div className="app-shell">
       <header className="topbar px-4 py-2 border-b border-line bg-topbar flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
+        <div className="doc-left flex flex-col gap-0.5">
           <div className="flex items-center gap-4">
             <button className="text-fg-2 hover:text-fg" title="Back to dashboard" aria-label="Back to dashboard" onClick={() => navigate('/')}>
               <ArrowLeft size={16} />
             </button>
             <div className="flex items-center gap-3 text-[13px] font-medium text-fg">
-              <Link to="/" className="hover:text-accent mr-1 no-underline">Head<span className="text-fg-3">spot</span></Link>
+              <Link to="/" className="doc-wordmark hover:text-accent mr-1 no-underline">Head<span className="text-fg-3">spot</span></Link>
               <div className="menu-anchor">
                 <button className="py-1 hover:text-accent" aria-haspopup="menu" aria-expanded={fileMenuOpen} onClick={() => setFileMenuOpen((v) => !v)}>File</button>
                 {fileMenuOpen && <Menu items={fileItems} close={() => setFileMenuOpen(false)} />}
@@ -951,7 +953,7 @@ export function EditorPage() {
           )}
         </div>
         
-        <div className="flex items-center min-w-0 text-[13px] font-medium text-fg-2">
+        <div className="doc-center flex items-center min-w-0 text-[13px] font-medium text-fg-2">
           <Cloud size={14} className="mr-2 shrink-0" />
           <button onClick={() => setActivePanel('settings')} title="Account — open settings" className="hover:text-fg hidden truncate max-w-[140px] sm:inline">
             {email ?? 'Account'}
@@ -964,7 +966,7 @@ export function EditorPage() {
           <span className="text-fg font-semibold truncate">{activeFilePath.replace(/^\//, '')}</span>
         </div>
 
-        <div className="flex items-center gap-2 text-fg-2">
+        <div className="doc-right flex items-center gap-2 text-fg-2">
           {presence.length > 0 && (
             <div className="flex items-center -space-x-1.5 mr-1" title={presence.map((p) => p.name).join(', ')}>
               {presence.slice(0, 4).map((p) => (
@@ -979,7 +981,7 @@ export function EditorPage() {
               ))}
             </div>
           )}
-          <span role="status" aria-live="polite" className="flex items-center gap-1.5 text-xs text-fg-3 min-w-[110px] justify-end">
+          <span role="status" aria-live="polite" className="doc-save flex items-center gap-1.5 text-xs text-fg-3 min-w-[110px] justify-end">
             {saveState === 'offline' && <span className="text-warning">Offline — queued</span>}
             {saveState === 'error' && <span className="text-danger">Save failed</span>}
             {saveState === 'saving' && navigator.onLine && <>Saving…</>}
@@ -994,7 +996,7 @@ export function EditorPage() {
             <button aria-label="Redo" title="Redo" className="p-1 hover:bg-raised rounded text-fg" onClick={() => { const v = editorViewRef.current; if (v) redo(v) }}><Redo2 size={15} /></button>
             <div className="w-px h-4 bg-line mx-1" />
             <button aria-label="Zoom out" title="Zoom out" className="p-1 hover:bg-raised rounded text-fg" onClick={() => setZoom(z => Math.max(25, z - 10))}><Minus size={15} /></button>
-            <span className="text-xs w-10 text-center font-medium">{zoom}%</span>
+            <span className="tnum text-xs w-10 text-center font-medium">{zoom}%</span>
             <button aria-label="Zoom in" title="Zoom in" className="p-1 hover:bg-raised rounded text-fg" onClick={() => setZoom(z => Math.min(500, z + 10))}><Plus size={15} /></button>
             <div className="w-px h-4 bg-line mx-1" />
             <button
@@ -1014,7 +1016,6 @@ export function EditorPage() {
               <Book size={15} />
             </button>
           </div>
-          
           <div className="w-px h-4 bg-line" aria-hidden="true" />
           <button
             onClick={onShareLink}
@@ -1040,7 +1041,7 @@ export function EditorPage() {
           <button aria-label="Files" title="Files" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'files' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'files' ? null : 'files')}>
             <Files size={18} />
           </button>
-          <button aria-label="Search" title="Find & replace" className={`p-2 rounded text-fg-2 hover:text-fg ${findOpen ? 'rail-active' : ''}`} onClick={() => setFindOpen((v) => !v)}>
+          <button aria-label="Find and replace" title="Find & replace" className={`p-2 rounded text-fg-2 hover:text-fg ${findOpen ? 'rail-active' : ''}`} onClick={() => setFindOpen((v) => !v)}>
             <Search size={18} />
           </button>
           <button aria-label="Outline" title="Outline" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'outline' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'outline' ? null : 'outline')}>
@@ -1059,6 +1060,7 @@ export function EditorPage() {
           <button aria-label="Toggle settings panel" title="Settings" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'settings' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'settings' ? null : 'settings')}>
             <Settings size={18} />
           </button>
+          <span className="rail-wordmark" aria-hidden="true">Headspot</span>
         </aside>
         <main className="workspace-main">
           {!ready && (

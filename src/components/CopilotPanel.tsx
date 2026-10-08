@@ -127,8 +127,8 @@ function renderWithInsert(text: string, onInsert: (code: string) => void) {
   return parts.map((part, i) =>
     i % 2 === 1 ? (
       <div key={i} className="my-1">
-        <pre className="bg-app rounded p-2 font-mono text-[11px] overflow-auto">{part.trim()}</pre>
-        <button className="mt-1 rounded border border-line px-2 py-0.5 text-[11px]" onClick={() => onInsert(part.trim())}>Insert into document</button>
+        <pre className="bg-app rounded p-2 font-mono text-xs overflow-auto">{part.trim()}</pre>
+        <button className="mt-1 rounded border border-line px-2 py-0.5 text-xs" onClick={() => onInsert(part.trim())}>Insert into document</button>
       </div>
     ) : (
       <span key={i}>{part}</span>

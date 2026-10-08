@@ -100,14 +100,14 @@ export function TomlPackageForm({ text, sourceFiles, onChange }: Props) {
 
         <Field
           label="Package name"
-          hint={!nameOk ? <span className="text-danger text-[11px]">lowercase letters, digits, dashes</span> : undefined}
+          hint={!nameOk ? <span className="text-danger text-xs">lowercase letters, digits, dashes</span> : undefined}
         >
           <input className={inputCls} value={cfg.name} onChange={(e) => apply({ ...cfg, name: e.target.value })} spellCheck={false} placeholder="my-package" />
         </Field>
 
         <Field
           label="Version"
-          hint={!verOk ? <span className="text-danger text-[11px]">semver, e.g. 0.1.0</span> : undefined}
+          hint={!verOk ? <span className="text-danger text-xs">semver, e.g. 0.1.0</span> : undefined}
         >
           <input className={inputCls} value={cfg.version} onChange={(e) => apply({ ...cfg, version: e.target.value })} spellCheck={false} />
         </Field>

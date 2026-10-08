@@ -1,16 +1,23 @@
 /* Editor workbench. Color comes only from the tokens in index.css. */
-.app-shell { height: 100dvh; min-height: 560px; overflow: hidden; display: flex; flex-direction: column; background: var(--app-bg); color: var(--text-primary); }
+.app-shell { height: 100dvh; min-height: 560px; display: flex; flex-direction: column; background: var(--app-bg); color: var(--text-primary); }
 .topbar { height: 58px; flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 0 18px; background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
 .cloud-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-text); display: inline-block; }
 .cloud-dot-error { background: var(--danger-fill); }
 .workbench { flex: 1 1 auto; min-height: 0; display: flex; }
 .activity-rail { flex: 0 0 58px; width: 58px; display: flex; flex-direction: column; align-items: center; padding: 8px 0 10px; background: var(--topbar-bg); border-right: 1px solid var(--border); overflow: hidden; }
 .rail-active { color: var(--text-primary); background: var(--rail-active); border-left-color: var(--accent-orange); }
+/* Vertical wordmark at the foot of the activity bar. */
+.rail-wordmark { writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 10px; color: var(--text-muted); font-size: 14px; font-weight: 600; letter-spacing: .12em; user-select: none; opacity: .8; }
+/* Roomier hit targets on touch surfaces. */
+@media (pointer: coarse) {
+  .activity-rail button { min-width: 44px; min-height: 44px; }
+  .file-row { min-height: 34px; }
+}
 .workspace-main { min-width: 0; flex: 1; display: flex; flex-direction: column; position: relative; }
-.editor-workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: 0px minmax(0, 1fr); position: relative; transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
+.editor-workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: 0px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); position: relative; transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
 .file-panel { width: 280px; flex: 0 0 280px; border-right: 1px solid var(--border); }
 .side-panel { width: 280px; flex: 0 0 280px; border-right: 1px solid var(--border); }
-.side-panel-host { min-width: 0; overflow: hidden; }
+.side-panel-host { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .editor-workspace .cm-editor { background: var(--editor-bg); color: var(--text-primary); }
 .editor-workspace .cm-scroller { padding-top: 8px; }
 /* CodeMirror's base theme hard-codes the gutter colour, which falls below AA in dark. */
@@ -19,10 +26,13 @@
 .preview-scroll { overscroll-behavior: contain; touch-action: pan-x pan-y; }
 .preview-page-layer { min-height: 100%; display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 8px 0; }
 /* Depth needs an offset and a blur; a zero-offset halo reads as decoration. */
-.preview-page { box-shadow: 0 10px 28px -12px rgba(0, 0, 0, .5); }
+.preview-page { box-shadow: 0 10px 28px -12px rgba(0, 0, 0, .5); content-visibility: auto; }
 @media (max-width: 760px) {
   .topbar { gap: 12px; padding: 0 12px; }
   .activity-rail { flex-basis: 46px; width: 46px; }
+  /* Compact header on small screens: keep menus + doc actions, drop the rest. */
+  .doc-center, .doc-wordmark, .doc-controls, .doc-save { display: none; }
+  .doc-left { min-width: 0; flex: 1 1 auto; }
   /* Side panels become an overlay drawer instead of disappearing. */
   .file-panel, .side-panel {
     position: absolute;
@@ -40,7 +50,11 @@
 .menu-root { position: relative; background: var(--panel-raised); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 10px 30px -8px rgba(0,0,0,.45); padding: 4px; min-width: 220px; color: var(--text-primary); font-size: 12px; z-index: 50; }
 /* Header menus are a fixed-width popup overlay so the bar never grows. */
 .menu-anchor { position: relative; }
-.menu-anchor > .menu-root { position: absolute; top: calc(100% + 4px); left: 0; width: 260px; max-width: 90vw; }
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.menu-anchor > .menu-root { position: absolute; top: calc(100% + 4px); left: 0; width: 260px; max-width: 90vw; animation: menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1); }
 .menu-row { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 4px; cursor: default; }
 .menu-row:hover, .menu-row-open { background: var(--rail-active); }
 .menu-row-disabled { opacity: .45; }
@@ -65,6 +79,11 @@
 .split-handle-horizontal { cursor: row-resize; }
 .split-handle-horizontal::after { height: 1px; width: 100%; }
 .split-handle-horizontal::before { inset: -6px 0; }
+/* 2x3 dot grip centered on the divider (transposes to 3x2 when stacked). */
+.split-grip { position: absolute; inset: 0; margin: auto; width: 6px; height: 10px; display: grid; grid-template-columns: repeat(2, 2px); grid-template-rows: repeat(3, 2px); gap: 2px; pointer-events: none; }
+.split-grip i { background: var(--text-muted); border-radius: 50%; opacity: .6; }
+.split-handle:hover .split-grip i, .split-handle:focus-visible .split-grip i { background: var(--accent-text); opacity: 1; }
+.split-handle-horizontal .split-grip { width: 10px; height: 6px; grid-template-columns: repeat(3, 2px); grid-template-rows: repeat(2, 2px); }
 
 /* File panel */
 .file-panel-header { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }

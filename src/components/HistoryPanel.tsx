@@ -37,8 +37,8 @@ export function HistoryPanel({ projectId, currentMainText, onRestore }: Props) {
               Restore this version
             </button>
           )}
-          <h4 className="mt-3 text-[11px] uppercase tracking-wide text-fg-3">Changes vs current</h4>
-          <div className="mt-1 whitespace-pre-wrap font-mono text-[11px] leading-4">
+          <h4 className="mt-3 text-xs uppercase tracking-wide text-fg-3">Changes vs current</h4>
+          <div className="mt-1 whitespace-pre-wrap font-mono text-xs leading-4">
             {diff.map((d, i) => (
               <div key={i} className={d.type === 'add' ? 'bg-accent-fill/10 text-accent' : d.type === 'del' ? 'bg-danger-fill/10 text-danger line-through' : 'text-fg-3'}>
                 {d.type === 'add' ? '+ ' : d.type === 'del' ? '- ' : '  '}{d.text}

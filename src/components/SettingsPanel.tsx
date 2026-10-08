@@ -78,7 +78,7 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
             <label className="flex items-start justify-between cursor-pointer group">
               <div className="flex flex-col">
                 <span className="text-fg-2 group-hover:text-fg transition-colors">Experimental compiler features</span>
-                <span className="text-[11px] text-fg-3 mt-0.5">Try unstable compiler options.</span>
+                <span className="text-xs text-fg-3 mt-0.5">Try unstable compiler options.</span>
               </div>
               <input type="checkbox" className="accent-accent-fill mt-1 w-3.5 h-3.5" checked={prefs.experimental} onChange={(e) => update('experimental', e.target.checked)} />
             </label>
@@ -180,7 +180,7 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
             <label className="flex items-start justify-between cursor-pointer group">
               <div className="flex flex-col">
                 <span className="text-fg-2 group-hover:text-fg transition-colors">Vim mode</span>
-                <span className="text-[11px] text-fg-3 mt-0.5">Applies keybindings as known from Vim.</span>
+                <span className="text-xs text-fg-3 mt-0.5">Applies keybindings as known from Vim.</span>
               </div>
               <input
                 type="checkbox"
