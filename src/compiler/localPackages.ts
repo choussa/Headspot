@@ -35,7 +35,7 @@ function stubEntries(name: string, version: string): TarEntry[] {
   const spec = `@local/${name}:${version}`
   return [
     { name: 'typst.toml', data: `[package]\nname = "${name}"\nversion = "${version}"\nentrypoint = "lib.typ"\n` },
-    { name: 'lib.typ', data: `#panic("Package ${spec} is not available in this workspace. Publish it from its source project via File > Package settings, or ask a collaborator to publish it.")\n` },
+    { name: 'lib.typ', data: `#panic("Package ${spec} is not available in this workspace.")\n` },
   ]
 }
 

@@ -1,6 +1,6 @@
 
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { parse as parseToml } from 'smol-toml'
 import { Project } from '../compiler/project'
 import { downloadBlob, svgToPngBlob, zipEntries } from '../compiler/exporters'
@@ -42,14 +42,10 @@ import {
   ArrowLeft, Search, Settings, Download, Undo2, Redo2, Loader2,
   Minus, Plus, ChevronDown, List, ListOrdered, Sigma, Code, AtSign, FormInput,
   TriangleAlert,
-  BookOpen, Package, CircleHelp, Cloud, Layout, Book, Files, MessageSquarePlus
+  BookOpen, CircleHelp, Cloud, Layout, Book, Files, MessageSquarePlus
 } from 'lucide-react'
 
 const project = new Project()
-
-// On-demand overlays are split out so they don't load with the editor shell.
-const PresentationMode = lazy(() => import('../components/PresentationMode').then((m) => ({ default: m.PresentationMode })))
-const PackageSettings = lazy(() => import('../components/PackageSettings').then((m) => ({ default: m.PackageSettings })))
 
 type ExportFormat = 'pdf' | 'zip' | 'svg' | 'png'
 
@@ -57,16 +53,6 @@ type ExportFormat = 'pdf' | 'zip' | 'svg' | 'png'
 function baseName(name: string | null | undefined): string {
   const slug = (name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return slug || 'document'
-}
-
-/** Escape text before interpolating it into generated HTML. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 export function EditorPage() {
@@ -95,14 +81,11 @@ export function EditorPage() {
   const [helpMenuOpen, setHelpMenuOpen] = useState(false)
   const [newFileOpen, setNewFileOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
-  const [presenting, setPresenting] = useState(false)
   const [comments, setComments] = useState<ProjectComment[]>([])
   const [popover, setPopover] = useState<{ commentId: string | null; range: { from: number; to: number }; anchor: PopoverAnchor } | null>(null)
   const [selAnchor, setSelAnchor] = useState<PopoverAnchor | null>(null)
   const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
   const userIdRef = useRef<string | null>(null)
-  const [packageViewOpen, setPackageViewOpen] = useState(false)
   const [exportPanelOpen, setExportPanelOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [assetQueue, setAssetQueue] = useState<{ name: string; data: Uint8Array }[]>([])
@@ -110,12 +93,10 @@ export function EditorPage() {
     void supabase.auth.getSession().then(({ data }) => {
       setEmail(data.session?.user.email ?? null)
       const uid = data.session?.user.id ?? null
-      setUserId(uid)
       userIdRef.current = uid
     })
   }, [])
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pendingDeleteFile, setPendingDeleteFile] = useState<string | null>(null)
   const { prefs, update } = usePreferences()
@@ -431,8 +412,6 @@ export function EditorPage() {
     },
     { label: 'Only show editor', onSelect: () => update('showBothPanels', false) },
     { label: 'Show both panels', checked: prefs.showBothPanels, onSelect: () => update('showBothPanels', true) },
-    { label: 'Present', onSelect: () => setPresenting(true) },
-    { label: 'Speaker mode', pro: true, disabled: true },
   ]
 
   const fileItems: MenuItem[] = [
@@ -442,8 +421,6 @@ export function EditorPage() {
     { label: 'Export sources (ZIP)', onSelect: () => void onExportSources() },
     { label: 'Export SVG', onSelect: () => void onExportSvg() },
     { label: 'Export PNG', onSelect: () => void onExportPng() },
-    { label: 'Publish to web', onSelect: () => void onPublish() },
-    { label: 'Package settings…', onSelect: () => setPackageViewOpen(true) },
     { label: 'Delete project…', onSelect: () => setConfirmDelete(true) },
     { label: 'Close', onSelect: () => navigate('/') },
   ]
@@ -520,21 +497,6 @@ export function EditorPage() {
       if (f && f.kind === 'source') updateFiles(setFileText(r.files, activeFilePath, (f.text ?? '') + '\n' + code))
     }
   }, [activeFilePath, updateFiles])
-
-  const onPublish = useCallback(async () => {
-    if (!record) return
-    const res = await project.compileProject(record.files, { ownerId: userIdRef.current, packageConfig: record.meta.packageConfig })
-    if (!res || res.pages.length === 0) return
-    const svgs = await Promise.all(res.pages.map((_, i) => project.renderPage(i)))
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(record.meta.name)}</title><style>body{margin:0;background:#444;display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px}svg{background:#fff;max-width:100%;height:auto;box-shadow:0 4px 24px rgba(0,0,0,.4)}</style></head><body>${svgs.filter(Boolean).join('\n')}</body></html>`
-    const { error } = await supabase.storage.from('project-assets').upload(`published/${record.meta.id}/index.html`, new Blob([html], { type: 'text/html' }), { upsert: true, contentType: 'text/html' })
-    if (error) {
-      console.error('Publish failed', error)
-      return
-    }
-    const { data } = supabase.storage.from('project-assets').getPublicUrl(`published/${record.meta.id}/index.html`)
-    setPublishedUrl(data.publicUrl)
-  }, [record])
 
   const activeFile = record ? fileByPath(record.files, activeFilePath) : undefined
 
@@ -1082,9 +1044,6 @@ export function EditorPage() {
           <button aria-label="Outline" title="Outline" className={`p-2 rounded text-fg-2 hover:text-fg ${activePanel === 'outline' ? 'rail-active' : ''}`} onClick={() => setActivePanel(activePanel === 'outline' ? null : 'outline')}>
             <BookOpen size={18} />
           </button>
-          <button aria-label="Packages" title="Package & template settings" className={`p-2 rounded text-fg-2 hover:text-fg ${packageViewOpen ? 'rail-active' : ''}`} onClick={() => setPackageViewOpen((v) => !v)}>
-            <Package size={18} />
-          </button>
 
           <div className="flex-1" />
 
@@ -1308,12 +1267,6 @@ export function EditorPage() {
         </main>
       </div>
 
-      {presenting && (
-        <Suspense fallback={null}>
-          <PresentationMode pages={pages} renderPage={renderPage} onExit={() => setPresenting(false)} />
-        </Suspense>
-      )}
-
       <PromptDialog
         open={shareUrl !== null}
         title="Copy your share link"
@@ -1323,17 +1276,6 @@ export function EditorPage() {
         confirmLabel="Done"
         onCancel={() => setShareUrl(null)}
         onConfirm={() => setShareUrl(null)}
-      />
-
-      <PromptDialog
-        open={publishedUrl !== null}
-        title="Published"
-        description="Your document is published as a view-only HTML page."
-        initialValue={publishedUrl ?? ''}
-        readOnly
-        confirmLabel="Done"
-        onCancel={() => setPublishedUrl(null)}
-        onConfirm={() => setPublishedUrl(null)}
       />
 
       <PromptDialog
@@ -1388,23 +1330,6 @@ export function EditorPage() {
         onCancel={() => setRenameOpen(false)}
         onConfirm={(value) => { setRenameOpen(false); void onRenameProject(value) }}
       />
-
-      {packageViewOpen && record && (
-        <Suspense fallback={null}>
-        <PackageSettings
-          record={record}
-          ownerId={userId}
-          onClose={() => setPackageViewOpen(false)}
-          onUpdateConfig={(cfg) => {
-            const r = recordRef.current
-            if (!r) return
-            const next = { ...r, meta: { ...r.meta, packageConfig: cfg } }
-            setRecord(next)
-            persist(next)
-          }}
-        />
-        </Suspense>
-      )}
 
       {selAnchor && !popover && activeFile?.kind === 'source' && (
         <button

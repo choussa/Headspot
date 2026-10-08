@@ -3,7 +3,6 @@ import { AlignLeft, AlignRight } from 'lucide-react'
 import type { Preferences } from '../state/preferences'
 import type { ProjectRecord } from '../state/workspace'
 import { listFolders, type FolderMeta } from '../storage/cloudStore'
-import { loadGithubConfig, saveGithubConfig, pushToGitHub } from '../integrations/github'
 
 interface Props {
   prefs: Preferences
@@ -16,10 +15,6 @@ interface Props {
 
 export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename, onMoveFolder }: Props) {
   const [folders, setFolders] = useState<FolderMeta[]>([])
-  const [gh, setGh] = useState(loadGithubConfig)
-  const [ghBusy, setGhBusy] = useState(false)
-  const [ghStatus, setGhStatus] = useState<string | null>(null)
-  const [ghError, setGhError] = useState<string | null>(null)
   const fontFamilyId = useId()
   const dictionaryId = useId()
   useEffect(() => {
@@ -194,40 +189,6 @@ export function SettingsPanel({ prefs, update, onRequestDelete, record, onRename
                 onChange={(e) => update('vimMode', e.target.checked)}
               />
             </label>
-          </div>
-        </section>
-        
-        <section>
-          <h3 className="text-fg font-semibold mb-4 text-[14px]">Version control</h3>
-          <div className="flex flex-col gap-3 text-xs">
-            <input aria-label="GitHub token" className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="GitHub token" type="password" autoComplete="off" value={gh.token} onChange={(e) => setGh({ ...gh, token: e.target.value })} />
-            <input aria-label="GitHub repository (owner/repo)" className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="owner/repo" value={gh.repo} onChange={(e) => setGh({ ...gh, repo: e.target.value })} />
-            <input aria-label="GitHub branch" className="bg-app border border-line rounded px-2.5 py-1.5 text-fg outline-none focus:border-accent-fill" placeholder="branch (main)" value={gh.branch} onChange={(e) => setGh({ ...gh, branch: e.target.value })} />
-            <button
-              type="button"
-              className="rounded border border-line px-3 py-1.5 text-fg-2 hover:text-fg disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={ghBusy || !record}
-              onClick={async () => {
-                if (!record) return
-                setGhBusy(true)
-                setGhStatus(null)
-                setGhError(null)
-                try {
-                  saveGithubConfig(gh)
-                  await pushToGitHub(gh, record.files.filter((f) => f.kind === 'source').map((f) => ({ path: f.path, text: f.text ?? '' })), `Update ${record.meta.name}`)
-                  setGhStatus('Pushed to GitHub')
-                } catch (e) {
-                  setGhError(e instanceof Error ? e.message : 'Push failed. Check the repository, branch, and token permissions.')
-                } finally {
-                  setGhBusy(false)
-                }
-              }}
-            >
-              {ghBusy ? 'Pushing…' : 'Push to GitHub'}
-            </button>
-            {!record && <p className="text-fg-3">Open a project to push.</p>}
-            {ghStatus && <p role="status" aria-live="polite" className="text-fg-3">{ghStatus}</p>}
-            {ghError && <p role="alert" className="text-danger">{ghError}</p>}
           </div>
         </section>
 

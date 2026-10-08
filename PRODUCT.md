@@ -20,20 +20,20 @@ Browser-native editing with real-time multi-user collaboration as the headline. 
 
 ## Operating Context
 
-Browser tab or installable web app. Users work in projects made of source files (Typst) and asset files (images, fonts), tracked in the cloud with a local cache for offline use. Documents are compiled to a paged preview, exported (PDF, PNG, SVG, source), versioned through snapshots, annotated with comments, and optionally pushed to GitHub or published as a Typst package/template.
+Browser tab or installable web app. Users work in projects made of source files (Typst) and asset files (images, fonts), tracked in the cloud with a local cache for offline use. Documents are compiled to a paged preview, exported (PDF, PNG, SVG, source), versioned through snapshots, and annotated with threaded comments.
 
 ## Capabilities and Constraints
 
 Capabilities that must be preserved:
 
 - CodeMirror-based Typst editor with diagnostics; Typst compiler running client-side as WASM
-- Live, virtualized paged preview with zoom and source-jump navigation; presentation mode
+- Live, virtualized paged preview with zoom and source-jump navigation
 - Real-time collaboration (Yjs) over Supabase realtime channels
 - Authentication and cloud project storage via Supabase, with IndexedDB local cache and an offline queue
 - Multi-file projects: create/rename/move/delete files and folders; asset uploads with drag-and-drop
 - Export to PDF, PNG, SVG, and source archive
 - Comment threads anchored to source ranges; document history snapshots with restore and diff
-- GitHub integration (token/repo/branch push) and Typst package/template settings incl. TOML package metadata and template gallery
+- Typst template gallery and TOML package metadata editing
 - AI Copilot panel for Typst authoring assistance
 - Reference/outline panel and templates
 
@@ -42,7 +42,7 @@ Technical constraints:
 - Build: React 19 + TypeScript + Vite; Tailwind v4 for styling; CodeMirror 6; Supabase for auth/storage/realtime; Yjs for collaboration; IndexedDB for local persistence
 - The full editor is an "Operate" surface: scanability, consistency, and native expectations outrank expression; branding lives in precise details
 
-Terminology: project, source file, asset, compile, preview, snapshot, comment, package, template, publish.
+Terminology: project, source file, asset, compile, preview, snapshot, comment, template.
 
 ## Brand Commitments
 
