@@ -1,10 +1,10 @@
 /* Editor workbench. Color comes only from the tokens in index.css. */
 .app-shell { height: 100dvh; min-height: 560px; overflow: hidden; display: flex; flex-direction: column; background: var(--app-bg); color: var(--text-primary); }
-.topbar { min-height: 48px; display: flex; align-items: flex-start; gap: 14px; padding: 4px 18px; background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+.topbar { height: 58px; flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 0 18px; background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
 .cloud-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-text); display: inline-block; }
 .cloud-dot-error { background: var(--danger-fill); }
 .workbench { flex: 1 1 auto; min-height: 0; display: flex; }
-.activity-rail { width: 58px; display: flex; flex-direction: column; align-items: center; padding: 8px 0 10px; background: var(--topbar-bg); border-right: 1px solid var(--border); }
+.activity-rail { flex: 0 0 58px; width: 58px; display: flex; flex-direction: column; align-items: center; padding: 8px 0 10px; background: var(--topbar-bg); border-right: 1px solid var(--border); overflow: hidden; }
 .rail-active { color: var(--text-primary); background: var(--rail-active); border-left-color: var(--accent-orange); }
 .workspace-main { min-width: 0; flex: 1; display: flex; flex-direction: column; position: relative; }
 .editor-workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: 0px minmax(0, 1fr); position: relative; transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -21,8 +21,8 @@
 /* Depth needs an offset and a blur; a zero-offset halo reads as decoration. */
 .preview-page { box-shadow: 0 10px 28px -12px rgba(0, 0, 0, .5); }
 @media (max-width: 760px) {
-  .topbar { gap: 12px; padding: 4px 12px; }
-  .activity-rail { width: 46px; }
+  .topbar { gap: 12px; padding: 0 12px; }
+  .activity-rail { flex-basis: 46px; width: 46px; }
   /* Side panels become an overlay drawer instead of disappearing. */
   .file-panel, .side-panel {
     position: absolute;
